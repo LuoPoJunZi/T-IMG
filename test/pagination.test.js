@@ -1,4 +1,5 @@
-const assert = require('assert');
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 
 describe('KV list pagination', function () {
   async function getOnRequest() {

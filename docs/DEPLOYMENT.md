@@ -1,0 +1,113 @@
+# 部署与配置
+
+## 本地开发要求
+
+- Git
+- Node.js 22（仓库 CI 使用 Node 22，本次验证为 `v22.23.1`）
+- npm 10 或与锁文件兼容的 npm
+- 可访问 npm registry；真实上传验证还需可访问 Telegram API
+
+安装依赖：
+
+```bash
+npm ci
+```
+
+T-IMG 不跟踪 `node_modules/`，依赖版本以 `package-lock.json` 为准。不要提交本地依赖目录。
+
+启动本地 Pages 环境：
+
+```bash
+npm start
+```
+
+当前脚本在 `http://localhost:8080` 启动 Wrangler，固定本地兼容日期，绑定本地持久化 KV `img_url`，并注入仅用于本地测试的 Basic Auth 值。不得把脚本中的测试凭据复用于生产。Wrangler 会将本地状态写入已忽略的 `data/`。
+
+测试命令：
+
+```bash
+npm test
+npm run ci-test
+```
+
+`npm test` 使用 Node.js 内置测试运行器；`npm run ci-test` 同时启动本地 Pages 服务、等待首页可访问并执行完整测试。当前自动化测试不调用真实 Telegram。
+
+## `.env.example` 的作用
+
+`.env.example` 是安全的变量清单，不包含真实值。当前 `npm start` 通过命令行 `--binding` 注入本地变量，不会自动加载 `.env.example` 或 `.env`。生产变量应在 Cloudflare Pages 控制台设置；如果未来采用 Wrangler 的变量文件功能，应先确认文件已被 `.gitignore` 排除。
+
+## Cloudflare Pages 部署
+
+1. 在自己的 GitHub/GitLab 仓库保留完整项目和 `functions/` 目录。
+2. 在 Cloudflare Dashboard 创建 Pages 项目并连接仓库。
+3. 本项目静态文件已位于根目录，不需要前端构建命令。构建输出目录使用仓库根目录；具体控制台对“无构建”项目的填写方式以账户界面为准。
+4. Pages 自动识别 `functions/` 并部署 Functions 路由。
+5. Pages 读取根目录 `_redirects`，将旧静态路径永久重定向到规范名称。
+6. 配置下列生产变量和可选 KV 绑定。
+7. 变量或绑定变化后重新部署，使 Functions 获得新配置。
+
+仓库没有生产 `wrangler.toml`，避免在未知控制台配置时让仓库文件接管生产绑定。本地 `npm start` 已显式固定兼容日期；生产项目兼容日期必须在 Cloudflare 控制台确认并单独回归测试。
+
+## Telegram 必需变量
+
+```env
+TG_Bot_Token=your_telegram_bot_token
+TG_Chat_ID=your_telegram_chat_id
+MAX_UPLOAD_SIZE_BYTES=20971520
+```
+
+Bot 必须有向目标频道或群组发送文件的权限。缺少任一必需变量时上传接口返回 503。`MAX_UPLOAD_SIZE_BYTES` 可选，只能降低默认 20 MiB 上限；该上限用于保证文件可由公共 Bot API `getFile` 路径取回。
+
+## KV 命名空间绑定
+
+后台管理、元数据、黑白名单和审核记录依赖 KV。先创建 KV 命名空间，再在 Pages 项目的 Functions 设置中添加绑定：
+
+```text
+变量名称：img_url
+绑定类型：KV Namespace
+目标：选择专用于本项目的命名空间
+```
+
+`img_url` 不是普通环境变量。未绑定时上传仍可尝试工作，但不记录元数据；文件可直接代理；管理 API 会提示后台已禁用。
+
+## 管理后台认证
+
+```env
+BASIC_USER=your_admin_username
+BASIC_PASS=your_strong_admin_password
+```
+
+生产环境强烈建议同时设置两项。当前实现未设置 `BASIC_USER` 时会跳过 Basic Auth；如果改用 Cloudflare Access，应完整保护 `/admin*` 和 `/api/manage/*`，并验证静态管理页面与所有变更接口都无法匿名访问。不要在浏览器截图、日志或工单中暴露 Authorization Header。
+
+## 可选内容审核与运行模式
+
+```env
+ModerateContentApiKey=your_api_key
+WhiteList_Mode=false
+```
+
+设置审核 Key 后，首次访问未分类图片时会调用 ModerateContent。白名单模式只有在字符串严格等于 `true` 且绑定 KV 时生效。外部审核失败时当前实现倾向继续返回内容，上线前应根据安全策略评估。
+
+## 生产注意事项
+
+- 不把任何真实值提交到 `.env.example`、README、工作流、源码或测试。
+- Telegram 文件大小、Cloudflare Functions/KV 配额和外部服务限制会变化，应在生产前查阅对应官方文档。
+- KV 删除只移除管理记录，不保证删除 Telegram 上的文件。
+- 管理接口已移除敏感调试日志并修复重命名参数；生产环境仍须启用强认证或 Cloudflare Access。
+- 不把本地 `data/` 或 `.wrangler/` 上传到仓库或生产。
+- 部署后验证 `admin-gallery.html`、`markdown-upload.html` 等规范入口，并确认旧静态路径返回 301；不要删除 `_redirects` 中仍有外部调用方使用的兼容规则。
+
+## 重新部署条件
+
+Functions 代码、静态文件、环境变量、KV 绑定、兼容日期或 Pages 项目设置变化后需要重新部署。只修改本地 `.env` 不会自动影响 Cloudflare。
+
+## 常见错误排查
+
+- 上传返回 503：确认两项 Telegram 变量已经注入并重新部署。
+- 上传返回 413：文件超过 T-IMG 默认或自定义上限；不要把 `MAX_UPLOAD_SIZE_BYTES` 设置得高于 20 MiB。
+- 上传返回 502：确认 Bot 权限、目标 ID、Telegram 可用性和文件类型，并检查脱敏后的 Functions 状态日志。
+- 后台提示已禁用：确认 KV 绑定名称严格为 `img_url`，并在绑定后重新部署。
+- 后台持续 401：确认用户名和密码同时配置，浏览器未缓存旧凭据；不要把真实凭据复制到工单。
+- 文件首次加载慢：可能正在查询 Telegram 路径、初始化 KV 或调用内容审核。
+- 本地找不到 `mocha`/`wrangler`：执行 `npm ci`，不要依赖仓库中已跟踪的不完整依赖目录。
+- 生产与本地行为不同：核对 Cloudflare 控制台中的兼容日期、环境变量和 KV 绑定；仓库内本地日期不会自动覆盖生产配置。

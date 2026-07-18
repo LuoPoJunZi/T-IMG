@@ -1,4 +1,16 @@
-node_modules/.bin/*
-node_modules/.mf/*
-.wrangler/*
-data/*
+# Dependencies are restored from package-lock.json and are never committed.
+node_modules/
+
+# Cloudflare/Wrangler local state and local KV persistence.
+.wrangler/
+data/
+
+# Local environment files. Keep the documented template under version control.
+.env
+.env.*
+!.env.example
+
+# Common local logs and operating-system/editor files.
+*.log
+.DS_Store
+Thumbs.db

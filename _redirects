@@ -1,0 +1,8 @@
+# Legacy static paths retained after the T-IMG repository naming cleanup.
+/index-md.html /markdown-upload.html 301
+/admin-imgtc.html /admin-gallery.html 301
+/admin-imgtc.css /assets/styles/admin-gallery.css 301
+/block-img.html /image-blocked.html 301
+/whitelist-on.html /whitelist-enabled.html 301
+/bg.svg /assets/images/background.svg 301
+/music.svg /assets/icons/music.svg 301
