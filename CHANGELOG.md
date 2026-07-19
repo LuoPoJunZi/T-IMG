@@ -12,6 +12,7 @@
 - 增加可选的 `MAX_UPLOAD_SIZE_BYTES` 上传限制配置。
 - 增加仓库文件命名规范、静态路径兼容重定向及规范管理 API 路由。
 - 增加上传访问登录页、后端密码校验、签名 Cookie 会话、退出接口和 KV 登录限流。
+- 增加 Cloudflare 配置类型对照表，以及上传访问密码、会话密钥、限流 KV 和 Fail closed 的逐步配置教程。
 
 ### Changed
 

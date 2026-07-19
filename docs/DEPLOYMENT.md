@@ -73,6 +73,96 @@ UPLOAD_SESSION_MAX_AGE=604800
 
 不要把它与 `img_url` 共用，否则认证计数会污染图片索引。登录按匿名化客户端地址计数，10 分钟内第 5 次失败开始返回 429。KV 具有最终一致性，因此这是基础限流；高风险部署应叠加 Cloudflare WAF/Rate Limiting 或 Access。缺少密码、会话密钥时上传页面和接口返回 503；缺少 `UPLOAD_AUTH_KV` 时新登录返回 503，已有有效签名会话仍可使用。
 
+### 上传访问密码配置教程
+
+这里真正提供给访问者输入的密码只有一个：`UPLOAD_ACCESS_PASSWORD`。站点所有者先在 Cloudflare 设置这个密码，访问者打开上传页面时会先进入 `/upload-login`，输入相同密码并经后端校验成功后才能看到和使用上传界面。
+
+`UPLOAD_SESSION_SECRET` 不是第二个登录密码，而是系统内部用于签名安全 Cookie 的随机密钥。访问者不需要知道或输入它。两个值必须不同，也不能使用仓库中的占位值或本地测试值。
+
+#### 第一步：设置用户需要输入的访问密码
+
+进入 Cloudflare Dashboard：
+
+```text
+Workers & Pages > T-IMG > Settings > Variables and Secrets > Add
+```
+
+新增以下项目，并选择 **Encrypt** 后保存为 Secret：
+
+```text
+名称：UPLOAD_ACCESS_PASSWORD
+值：站点所有者自行设置的强密码
+类型：Secret
+```
+
+该值就是访问者在 `/upload-login` 页面需要输入的密码。代码要求至少 12 字符；生产环境建议使用密码管理器生成并保存至少 20 字符的随机密码，不要使用姓名、生日、手机号或其他网站已使用的密码。
+
+#### 第二步：生成并设置系统内部会话密钥
+
+可使用密码管理器生成至少 32 字符的随机值，也可在 Windows PowerShell 中运行：
+
+```powershell
+$sessionSecretBytes = New-Object byte[] 48
+$sessionSecretGenerator = [Security.Cryptography.RandomNumberGenerator]::Create()
+$sessionSecretGenerator.GetBytes($sessionSecretBytes)
+[Convert]::ToBase64String($sessionSecretBytes)
+$sessionSecretGenerator.Dispose()
+```
+
+复制命令输出，在同一 Cloudflare 页面新增：
+
+```text
+名称：UPLOAD_SESSION_SECRET
+值：刚生成的随机字符串
+类型：Secret（选择 Encrypt）
+```
+
+不要把输出提交到 Git、写入 README、发送到聊天或复用为 `UPLOAD_ACCESS_PASSWORD`。修改该密钥会立即让已有登录会话失效。
+
+#### 第三步：设置登录保持时间
+
+新增普通变量：
+
+```text
+名称：UPLOAD_SESSION_MAX_AGE
+值：604800
+类型：普通变量
+```
+
+`604800` 表示 7 天。也可使用 `86400`（1 天）；代码允许的范围为 300 秒至 2592000 秒（30 天）。
+
+#### 第四步：创建并绑定登录限流 KV
+
+1. 在 Cloudflare Dashboard 的 Workers KV 页面选择 **Create instance**。
+2. Namespace 名称可填写 `t-img-upload-auth`；该资源名称可以自定义。
+3. 回到 `Workers & Pages > T-IMG > Settings > Bindings`。
+4. 选择 **Add > KV Namespace**。
+5. Variable name 必须严格填写 `UPLOAD_AUTH_KV`。
+6. 选择刚创建的 `t-img-upload-auth` Namespace 并保存。
+
+KV 资源名称可以自定义，但代码读取的绑定名称必须是 `UPLOAD_AUTH_KV`。不要选择现有的 `img_url`；前者保存错误登录计数，后者保存图片元数据。需要使用 Preview 部署时，建议为 Preview 单独创建并绑定 KV，避免测试计数影响生产。
+
+#### 第五步：设置失败关闭并重新部署
+
+进入：
+
+```text
+Workers & Pages > T-IMG > Settings > Runtime > Fail open / closed
+```
+
+选择 **Fail closed**。认证 Function 无法执行或免费配额耗尽时，Cloudflare 将返回错误页面，而不是绕过认证继续提供静态上传页面。完成 Secret、变量和 KV 绑定后重新部署最新 `main`；生产环境至少需要配置 Production，使用 Preview 时还需单独检查 Preview 配置。
+
+Cloudflare 官方参考：[Pages Functions 变量与 Secret](https://developers.cloudflare.com/pages/functions/bindings/)、[Workers KV 创建与绑定](https://developers.cloudflare.com/kv/get-started/)、[Pages Functions Fail closed](https://developers.cloudflare.com/pages/functions/routing/)。
+
+#### 第六步：部署后验收
+
+1. 使用无痕窗口打开 `/` 或 `/markdown-upload.html`，应先跳转到 `/upload-login`。
+2. 输入与 `UPLOAD_ACCESS_PASSWORD` 不同的密码，应拒绝进入。
+3. 输入完全相同的密码，应进入原上传界面并可正常上传。
+4. 刷新页面，在 `UPLOAD_SESSION_MAX_AGE` 有效期内应保持登录。
+5. 点击“退出上传”后，再次访问上传页面应重新要求输入密码。
+6. 未登录直接请求 `POST /upload` 应返回 401；已有 `/file/:id` 仍应公开访问，后台管理不应被重定向到上传登录页。
+
 ## Telegram 必需变量
 
 ```env

@@ -51,21 +51,26 @@ npm start
 
 ## Configuration
 
-| Name | Required | Purpose |
-|---|---|---|
-| `TG_Bot_Token` | Yes | Telegram Bot Token |
-| `TG_Chat_ID` | Yes | Target channel or group ID |
-| `MAX_UPLOAD_SIZE_BYTES` | No | Upload limit up to 20 MiB |
-| `UPLOAD_ACCESS_PASSWORD` | Yes | Upload-page access password; configure as a Cloudflare Secret |
-| `UPLOAD_SESSION_SECRET` | Yes | HMAC session signing key; configure as a Cloudflare Secret |
-| `UPLOAD_SESSION_MAX_AGE` | No | Session lifetime in seconds; defaults to 7 days |
-| `UPLOAD_AUTH_KV` | Yes | Dedicated KV binding for failed-login throttling |
-| `img_url` | No | Cloudflare KV namespace binding |
-| `BASIC_USER`, `BASIC_PASS` | Recommended | Management Basic Auth |
-| `ModerateContentApiKey` | No | Content review for legacy Telegraph files |
-| `WhiteList_Mode` | No | Allowlist-only display mode when set to `true` |
+| Name | Required | Cloudflare type | Purpose |
+|---|---|---|---|
+| `TG_Bot_Token` | Yes | Secret | Telegram Bot Token |
+| `TG_Chat_ID` | Yes | Text | Target channel or group ID |
+| `MAX_UPLOAD_SIZE_BYTES` | No | Text | Upload limit up to 20 MiB |
+| `UPLOAD_ACCESS_PASSWORD` | Yes | Secret | Password visitors enter on the upload login page |
+| `UPLOAD_SESSION_SECRET` | Yes | Secret | Backend-only HMAC session signing key |
+| `UPLOAD_SESSION_MAX_AGE` | No | Text | Session lifetime in seconds; defaults to 7 days |
+| `UPLOAD_AUTH_KV` | Yes | KV namespace binding | Dedicated storage for failed-login throttling |
+| `img_url` | No | KV namespace binding | Image metadata, management, and list data |
+| `BASIC_USER` | Recommended | Text | Management Basic Auth username |
+| `BASIC_PASS` | Recommended | Secret | Management Basic Auth password |
+| `ModerateContentApiKey` | No | Secret | Content review for legacy Telegraph files |
+| `WhiteList_Mode` | No | Text | Allowlist-only display mode when set to `true` |
 
 Copy variable names from [`.env.example`](.env.example), but configure real production values in Cloudflare Pages. Never commit real credentials. Full instructions are in the [deployment guide](docs/DEPLOYMENT.md).
+
+### Upload access quick setup
+
+The site owner chooses the password visitors enter on `/upload-login` and stores it as the encrypted Cloudflare Secret `UPLOAD_ACCESS_PASSWORD`. Configure a different random encrypted Secret as `UPLOAD_SESSION_SECRET`, set `UPLOAD_SESSION_MAX_AGE=604800` for a seven-day session, bind a dedicated Workers KV namespace as `UPLOAD_AUTH_KV`, and set Pages Functions to fail closed before redeploying. The session secret is an internal signing key and is never entered by visitors. The [deployment guide](docs/DEPLOYMENT.md) includes the dashboard walkthrough, safe key-generation commands, and acceptance checks.
 
 ## Public Routes
 

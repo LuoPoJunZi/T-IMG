@@ -113,4 +113,18 @@
 
 ### 当前状态
 
-DEV-009 已在本地完成但尚未提交、推送或部署。生产启用前必须在 Cloudflare 配置两个 Secret、会话时长、独立 `UPLOAD_AUTH_KV`，并把 Pages Functions 配额行为设置为 Fail closed。
+DEV-009 已通过提交 `c473b8e` 推送到独立公开仓库的 `main`，尚未部署生产。生产启用前必须在 Cloudflare 配置两个 Secret、会话时长、独立 `UPLOAD_AUTH_KV`，并把 Pages Functions 配额行为设置为 Fail closed。
+
+## 2026-07-19：Cloudflare 上传密码配置教程
+
+### 已完成
+
+- 在中英文 README 增加上传访问密码快速配置入口，并在配置表逐项标明应选择文本、密钥或 KV Namespace 绑定。
+- 在部署文档明确 `UPLOAD_ACCESS_PASSWORD` 是访问者实际输入的密码，`UPLOAD_SESSION_SECRET` 只是后端会话签名密钥。
+- 增加 Cloudflare Variables and Secrets、Workers KV 绑定、Fail closed、重新部署及生产验收的逐步说明。
+- 增加 Windows PowerShell 安全随机会话密钥生成命令，不在仓库中保存任何真实密码或密钥。
+
+### 验证
+
+- 教程中的变量名、最小长度、会话范围、KV 绑定名称和认证行为已与当前代码及 `.env.example` 核对。
+- 文档只包含占位说明和随机生成命令，不包含生产凭据。

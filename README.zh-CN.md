@@ -51,21 +51,34 @@ npm start
 
 ## 配置
 
-| 名称 | 必需性 | 用途 |
-|---|---|---|
-| `TG_Bot_Token` | 必需 | Telegram Bot Token |
-| `TG_Chat_ID` | 必需 | 目标频道或群组 ID |
-| `MAX_UPLOAD_SIZE_BYTES` | 可选 | 不超过 20 MiB 的上传限制 |
-| `UPLOAD_ACCESS_PASSWORD` | 必需 | 上传页面访问密码，必须配置为 Cloudflare Secret |
-| `UPLOAD_SESSION_SECRET` | 必需 | HMAC 会话签名密钥，必须配置为 Cloudflare Secret |
-| `UPLOAD_SESSION_MAX_AGE` | 可选 | 会话有效期秒数，默认 7 天 |
-| `UPLOAD_AUTH_KV` | 必需 | 专用于登录失败限流的 KV 绑定 |
-| `img_url` | 可选 | Cloudflare KV 命名空间绑定 |
-| `BASIC_USER`、`BASIC_PASS` | 建议配置 | 后台 Basic Auth |
-| `ModerateContentApiKey` | 可选 | 旧 Telegraph 文件的内容审核 |
-| `WhiteList_Mode` | 可选 | 设置为 `true` 时启用白名单模式 |
+| 名称 | 必需性 | Cloudflare 类型 | 用途 |
+|---|---|---|---|
+| `TG_Bot_Token` | 必需 | 密钥 | Telegram Bot Token |
+| `TG_Chat_ID` | 必需 | 文本 | 目标频道或群组 ID |
+| `MAX_UPLOAD_SIZE_BYTES` | 可选 | 文本 | 不超过 20 MiB 的上传限制 |
+| `UPLOAD_ACCESS_PASSWORD` | 必需 | 密钥 | 访问者在上传登录页输入的密码 |
+| `UPLOAD_SESSION_SECRET` | 必需 | 密钥 | 仅供后端使用的 HMAC 会话签名密钥 |
+| `UPLOAD_SESSION_MAX_AGE` | 可选 | 文本 | 会话有效期秒数，默认 7 天 |
+| `UPLOAD_AUTH_KV` | 必需 | KV Namespace 绑定 | 专用于登录失败限流的 KV |
+| `img_url` | 可选 | KV Namespace 绑定 | 图片元数据、后台管理和名单数据 |
+| `BASIC_USER` | 建议配置 | 文本 | 后台 Basic Auth 用户名 |
+| `BASIC_PASS` | 建议配置 | 密钥 | 后台 Basic Auth 密码 |
+| `ModerateContentApiKey` | 可选 | 密钥 | 旧 Telegraph 文件的内容审核 |
+| `WhiteList_Mode` | 可选 | 文本 | 设置为 `true` 时启用白名单模式 |
 
 变量名称可参考 [`.env.example`](.env.example)，真实生产值必须在 Cloudflare Pages 中配置，禁止提交到仓库。完整步骤见[部署说明](docs/DEPLOYMENT.md)。
+
+### 上传访问密码快速配置
+
+上传页面使用一个由站点所有者自行设置、由访问者在前台输入的密码：
+
+1. 在 Cloudflare Pages 项目的 `Settings > Variables and Secrets` 中新增加密 Secret：`UPLOAD_ACCESS_PASSWORD`，值填写你希望用户输入的强密码。
+2. 再新增加密 Secret：`UPLOAD_SESSION_SECRET`，值使用独立的长随机字符串。它只供后端签名会话，用户不需要知道，也不能与访问密码相同。
+3. 新增普通变量 `UPLOAD_SESSION_MAX_AGE=604800`，表示登录状态保持 7 天。
+4. 创建独立 Workers KV，并以变量名 `UPLOAD_AUTH_KV` 绑定到 Pages 项目，用于错误密码限流。
+5. 将 Pages Functions 的 Fail open / closed 设置为 `Fail closed`，然后重新部署。
+
+配置完成后，用户打开上传页面会先进入 `/upload-login`；输入与 `UPLOAD_ACCESS_PASSWORD` 相同的密码后才能使用上传界面。密码错误、会话过期或主动退出后都会重新禁止访问。随机密钥生成方法、Cloudflare 控制台逐步操作和验收清单见[部署说明](docs/DEPLOYMENT.md)。
 
 ## 公开路由
 
