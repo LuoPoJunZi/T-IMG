@@ -2,8 +2,8 @@
 
 ## 当前基线
 
-- 当前发布基线提交：`0018d65e722e2508a7442cac10b27530359469b0`
-- 基线提交日期：2026-02-27（提交时区 UTC-08:00）
+- 当前发布基线提交：`a929cca3a193a85d5878de5f92b9fa420aacb2de`
+- 基线提交日期：2026-07-19
 - 当前分支：`main`
 - Git 远程：仅配置个人公开仓库 `https://github.com/LuoPoJunZi/T-IMG.git` 为 `origin`，不配置其他代码远程
 - 初始本地工具：Node.js `v20.15.0`、npm `10.7.0`；公开发布基线升级为 Node.js 22
@@ -55,7 +55,8 @@
 | DEV-008 | 独立公开仓库发布准备 | 已完成 | `main`、GitHub Actions、Node 22、公开协作文档、README | 31 项测试、Wrangler 4、npm audit、远程检查 |
 | DEV-009 | 上传页面后端访问保护 | 已完成 | 根级中间件、上传认证 API、登录页、`/upload`、配置和文档 | 50 项测试、Wrangler 4、真实 HTTP 会话流程 |
 | DEV-009-A | 补充 Cloudflare 上传密码配置教程 | 已完成 | 中英文 README、部署文档、工作记录 | 配置类型表、控制台步骤、随机密钥、KV、Fail closed 和验收清单完整 |
-| DEV-010+ | 其他正式业务功能 | 已暂停 | 待分析 | 等待项目所有者确认 |
+| DEV-010 | 修复上传配置契约、诊断和 Pages HTTP 测试 | 已完成 | 上传与文件 Functions、上传反馈脚本、测试、配置文档 | 必需 KV 校验、安全日志、前端反馈、57 项单元测试与 59 项 HTTP 回归 |
+| DEV-011+ | 其他正式业务功能 | 已暂停 | 待分析 | 等待项目所有者确认 |
 
 ## 依赖关系
 
@@ -69,7 +70,8 @@
 - 缺少真实 Telegram、KV 和审核凭据：不使用生产密钥，本次只验证无外部写入的本地链路。
 - 上传认证依赖 Pages Functions：生产项目必须保留 `_routes.json` 并将配额行为设为 Fail closed，防止 Function 不可用时静态页面失败开放。
 - `UPLOAD_AUTH_KV` 是最终一致的基础限流：高风险公开部署应叠加 Cloudflare WAF/Rate Limiting 或 Access。
+- `img_url` 是上传索引必需绑定：上传前校验 KV 方法以避免无索引文件；Telegram 已成功后的瞬时 KV 写入失败只记录安全警告，避免用户重试产生重复文件。
 
 ## 当前状态
 
-DEV-001 至 DEV-009-A 均已完成；其他示例业务功能保持暂停。当前分支为 `main`，仅跟踪个人公开 `origin`；DEV-009 功能提交 `c473b8e` 已推送，生产 Cloudflare 配置和部署仍待项目所有者执行。
+DEV-001 至 DEV-010 均已完成；其他示例业务功能保持暂停。当前分支为 `main`，仅跟踪个人公开 `origin`；本轮修复尚未提交、推送或部署，生产 Cloudflare 配置仍由项目所有者管理。

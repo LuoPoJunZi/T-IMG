@@ -56,7 +56,7 @@
 - 用户价值：失败原因更清晰，减少无效外部请求、敏感信息暴露和重复上传风险。
 - 涉及页面：首页及管理页上传调用方（保持现有交互）。
 - 涉及接口：`POST /upload`，成功响应格式保持不变；错误响应使用稳定 JSON 信息和更准确状态码。
-- 配置要求：`TG_Bot_Token`、`TG_Chat_ID` 必需；默认最大 20 MiB，可用 `MAX_UPLOAD_SIZE_BYTES` 向下调整，确保上传内容可由公共 Bot API 的 `getFile` 链路取回。
+- 配置要求：`TG_Bot_Token`、`TG_Chat_ID` 和 KV Namespace 绑定 `img_url` 必需；默认最大 20 MiB，可用 `MAX_UPLOAD_SIZE_BYTES` 向下调整，确保上传内容可由公共 Bot API 的 `getFile` 链路取回。
 - 验收标准：正常、空文件、超限、缺失配置、Telegram 失败、网络异常及 KV 失败均有回归测试；不使用真实 Telegram。
 - 优先级：高
 - 状态：已完成
@@ -122,6 +122,18 @@
 - 优先级：高
 - 状态：已完成
 
+### DEV-010
+
+- 需求名称：上传配置契约与生产诊断修复
+- 需求描述：将 `img_url` 恢复为生产上传必需的 KV Namespace 绑定；在联系 Telegram 前校验 Telegram 字符串配置和 KV 方法；日志仅记录缺失配置名称；上传页针对会话过期、文件超限、服务配置和上游故障提供可操作反馈；CI 通过本地 Wrangler 的真实 HTTP 路由回归认证流程。
+- 用户价值：避免产生没有索引记录的新上传，阻止把文本变量误当 KV，缩短生产配置故障定位时间，并防止单元测试全绿却遗漏 Pages 路由问题。
+- 涉及页面：`index.html`、`markdown-upload.html` 及同源上传反馈脚本。
+- 涉及接口：`POST /upload` 新增 `image_index_not_configured` 503 错误码；成功响应、公开 `/file/:id` 和后台路由保持兼容。
+- 配置要求：Production 环境必须分别配置 `TG_Bot_Token`、`TG_Chat_ID`、`img_url`、上传认证 Secret 和 `UPLOAD_AUTH_KV`；`img_url` 必须是 KV Namespace 绑定，不能是文本或 Secret。
+- 验收标准：缺失、文本或不完整 `img_url` 在 Telegram 调用前被拒绝；日志不含配置值；已有公开文件在 KV 绑定异常时仍可访问；前端显示安全且可操作的错误；`npm test` 与真实 Pages HTTP 冒烟测试覆盖修复行为。
+- 优先级：高
+- 状态：已完成
+
 ## 非功能需求
 
 - 安全优先于兼容、功能、维护性和界面美观。
@@ -133,7 +145,7 @@
 ## 兼容性要求
 
 - 保留现有静态页面路径、Functions 路由、HTTP 方法和成功响应结构；认证失败可返回新增的 401、403、429 或 503。
-- 保留 Telegram 上传、同域 `/file/` 访问、可选 KV 管理和 Cloudflare Pages 部署方式。
+- 保留 Telegram 上传、同域 `/file/` 公开访问、必需的 `img_url` KV 索引与管理和 Cloudflare Pages 部署方式。
 - 不把项目迁移到新前端框架，不更换存储或现有后台认证架构。
 
 ## 安全要求
@@ -153,4 +165,4 @@
 ## 待确认事项
 
 - 原总任务说明中的其他示例功能仍不进入开发清单；只实施项目所有者单独确认的正式需求。
-- 生产域名、Cloudflare Pages 项目、`UPLOAD_AUTH_KV`、真实 Telegram/KV/内容审核联调仍待项目所有者配置和隔离验证。
+- 生产域名、Cloudflare Pages 项目、`img_url`、`UPLOAD_AUTH_KV`、真实 Telegram/KV/内容审核联调仍待项目所有者配置和隔离验证。

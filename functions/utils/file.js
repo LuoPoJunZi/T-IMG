@@ -29,6 +29,12 @@ function getSafeProxyHeaders(request) {
   return headers;
 }
 
+function hasFileMetadataBinding(binding) {
+  return binding
+    && typeof binding.getWithMetadata === "function"
+    && typeof binding.put === "function";
+}
+
 function getFileParts(id) {
   const value = String(id || "");
   if (!value || value.length > 512 || !/^[A-Za-z0-9._-]+$/.test(value)) return null;
@@ -169,7 +175,10 @@ export async function onRequest({ request, env, params }) {
 
   if (!upstreamResponse.ok) return upstreamResponse;
   if (isAllowedAdminPreview(request, env, url.origin)) return upstreamResponse;
-  if (!env.img_url) return upstreamResponse;
+  if (!hasFileMetadataBinding(env.img_url)) {
+    console.warn("File metadata binding is unavailable; serving the public file without metadata checks");
+    return upstreamResponse;
+  }
 
   const record = await env.img_url.getWithMetadata(file.id);
   const metadata = normalizeMetadata(record?.metadata, file.id);

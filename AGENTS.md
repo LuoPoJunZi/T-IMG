@@ -5,7 +5,7 @@
 ## 项目说明
 
 - 项目名称：T-IMG；未来 GitHub 仓库名称固定为 `T-IMG`。
-- 项目用途：提供基于 Cloudflare Pages Functions 和 Telegram Bot API 的文件上传、访问及可选图片管理能力。
+- 项目用途：提供基于 Cloudflare Pages Functions、Telegram Bot API 和必需 `img_url` KV 元数据绑定的文件上传、访问及图片管理能力。
 - 维护定位：T-IMG 是独立公开仓库，不建立 fork、外部远程或自动代码同步关系；在项目所有者确认需求后进行小步、可验证的长期开发。
 - 当前目标：修复已确认的本地稳定性与安全问题；未经确认不得把总任务文档中的示例功能当作待开发事项。
 - 主要平台：Cloudflare Pages、Pages Functions、Workers Runtime、Cloudflare KV、Telegram Bot API。

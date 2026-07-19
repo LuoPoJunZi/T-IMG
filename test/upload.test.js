@@ -9,8 +9,12 @@ const uploadAccessEnv = {
   BASIC_PASS: "management-secret",
 };
 
+function imageIndex(put = async () => {}) {
+  return { put };
+}
+
 function configuredEnv(extra = {}) {
-  return { ...uploadAccessEnv, ...extra };
+  return { ...uploadAccessEnv, img_url: imageIndex(), ...extra };
 }
 
 function uploadRequest(file, authenticated = true, extraHeaders = {}) {
@@ -95,6 +99,8 @@ describe("upload endpoint", function () {
 
   it("rejects uploads when Telegram is not configured", async function () {
     let fetchCalled = false;
+    const logMessages = [];
+    console.error = (...values) => logMessages.push(values.join(" "));
     globalThis.fetch = async () => {
       fetchCalled = true;
       return telegramResponse({ ok: true });
@@ -107,6 +113,30 @@ describe("upload endpoint", function () {
 
     assert.equal(response.status, 503);
     assert.equal((await responseJson(response)).code, "telegram_not_configured");
+    assert.equal(fetchCalled, false);
+    assert.match(logMessages.join("\n"), /TG_Bot_Token, TG_Chat_ID/);
+  });
+
+  it("rejects uploads before Telegram when the required img_url binding is missing or invalid", async function () {
+    let fetchCalled = false;
+    globalThis.fetch = async () => {
+      fetchCalled = true;
+      return telegramResponse({ ok: true });
+    };
+
+    for (const imgUrl of [undefined, "not-a-kv-binding", {}]) {
+      const response = await onRequestPost({
+        request: uploadRequest(new File(["data"], "image.png", { type: "image/png" })),
+        env: configuredEnv({
+          TG_Bot_Token: "test-token",
+          TG_Chat_ID: "test-chat",
+          img_url: imgUrl,
+        }),
+      });
+
+      assert.equal(response.status, 503);
+      assert.equal((await responseJson(response)).code, "image_index_not_configured");
+    }
     assert.equal(fetchCalled, false);
   });
 
@@ -146,11 +176,9 @@ describe("upload endpoint", function () {
       env: configuredEnv({
         TG_Bot_Token: "test-token",
         TG_Chat_ID: "test-chat",
-        img_url: {
-          put: async (key, value, options) => {
-            stored = { key, value, options };
-          },
-        },
+        img_url: imageIndex(async (key, value, options) => {
+          stored = { key, value, options };
+        }),
       }),
     });
 
@@ -161,7 +189,7 @@ describe("upload endpoint", function () {
     assert.equal(stored.options.metadata.fileSize, 5);
   });
 
-  it("keeps a successful upload when the optional KV write fails", async function () {
+  it("does not report a false failure when the required KV write fails after Telegram succeeds", async function () {
     globalThis.fetch = async () => telegramResponse({
       ok: true,
       result: { document: { file_id: "BQAC_kv-failure" } },
@@ -172,7 +200,7 @@ describe("upload endpoint", function () {
       env: configuredEnv({
         TG_Bot_Token: "test-token",
         TG_Chat_ID: "test-chat",
-        img_url: { put: async () => { throw new Error("KV unavailable"); } },
+        img_url: imageIndex(async () => { throw new Error("KV unavailable"); }),
       }),
     });
 

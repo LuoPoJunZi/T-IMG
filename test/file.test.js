@@ -64,6 +64,18 @@ describe("file proxy", function () {
     assert.equal(captured.options.headers.has("Cookie"), false);
   });
 
+  it("keeps public file access available when img_url is bound with the wrong type", async function () {
+    globalThis.fetch = async () => new Response("image", {
+      status: 200,
+      headers: { "Content-Type": "image/png" },
+    });
+
+    const response = await onRequest(fileContext({ env: { img_url: "not-a-kv-binding" } }));
+
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "image");
+  });
+
   it("does not call Telegram when its token is missing", async function () {
     let calls = 0;
     globalThis.fetch = async () => { calls += 1; return new Response("unexpected"); };
@@ -95,6 +107,7 @@ describe("file proxy", function () {
       BASIC_PASS: "secret",
       img_url: {
         getWithMetadata: async () => ({ value: "", metadata: { ListType: "Block", Label: "None" } }),
+        put: async () => {},
       },
     };
 
@@ -114,7 +127,7 @@ describe("file proxy", function () {
     assert.equal(authenticated.status, 200);
   });
 
-  it("keeps serving files when an optional metadata write fails", async function () {
+  it("keeps serving public files when a metadata write fails at runtime", async function () {
     globalThis.fetch = async () => new Response("image", { status: 200 });
     const response = await onRequest(fileContext({
       env: {

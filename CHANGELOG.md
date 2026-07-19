@@ -13,6 +13,8 @@
 - 增加仓库文件命名规范、静态路径兼容重定向及规范管理 API 路由。
 - 增加上传访问登录页、后端密码校验、签名 Cookie 会话、退出接口和 KV 登录限流。
 - 增加 Cloudflare 配置类型对照表，以及上传访问密码、会话密钥、限流 KV 和 Fail closed 的逐步配置教程。
+- 增加本地 Wrangler 真实 HTTP 登录、会话、退出和上传路由冒烟测试。
+- 增加上传失败分类提示；会话过期时自动返回上传登录页。
 
 ### Changed
 
@@ -26,6 +28,7 @@
 - 静态页面和资源改用语义化 kebab-case，资源归档到 `assets/images`、`assets/icons` 和 `assets/styles`；中文 README 改为 `README.zh-CN.md`。
 - 管理页面改用 `/api/manage/edit-name/:id` 和 `/api/manage/toggle-like/:id`，旧驼峰路径继续兼容。
 - 上传页面及 Pages Clean URLs 等价路径改由根级 Functions 中间件保护；`POST /upload` 同时校验上传会话或有效后台 Basic Auth。
+- `img_url` 明确为生产上传和后台管理必需的 KV Namespace 绑定；已有 `/file/:id` 在绑定异常时仍保持公开访问。
 
 ### Fixed
 
@@ -36,6 +39,9 @@
 - 修复仅凭管理页 Referer 绕过黑白名单的问题；启用 Basic Auth 后预览必须携带有效凭据。
 - 修复 Telegram 文件查询失败后继续请求无效外部地址的问题。
 - 修复可直接打开静态上传页或绕过页面调用 `/upload` 的未授权访问问题。
+- 修复缺少 `img_url`、把它误设为文本或不完整对象时仍联系 Telegram 并返回上传成功的问题。
+- 修复 CI 仅等待 Wrangler 启动但不通过 HTTP 验证 Pages 上传路由的问题。
+- 修复上传页吞掉 401、413、502、503 分类信息并统一显示不可操作错误的问题。
 
 ### Security
 

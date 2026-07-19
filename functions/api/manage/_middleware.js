@@ -17,6 +17,14 @@ function unauthorized(message) {
   });
 }
 
+function hasImageIndexBinding(binding) {
+  return binding
+    && typeof binding.getWithMetadata === "function"
+    && typeof binding.put === "function"
+    && typeof binding.delete === "function"
+    && typeof binding.list === "function";
+}
+
 async function errorHandling(context) {
   try {
     return await context.next();
@@ -29,8 +37,9 @@ async function errorHandling(context) {
 
 function authentication(context) {
   const { env, request } = context;
-  if (!env.img_url) {
-    return textResponse("Dashboard is disabled. Bind the img_url KV namespace to enable it.", 503);
+  if (!hasImageIndexBinding(env.img_url)) {
+    console.error("Management configuration missing or invalid: img_url");
+    return textResponse("Dashboard is disabled. Bind the img_url KV namespace correctly to enable it.", 503);
   }
 
   const authState = getBasicAuthState(env);

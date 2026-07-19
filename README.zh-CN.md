@@ -2,14 +2,14 @@
 
 [English](README.md) | 简体中文
 
-T-IMG 是基于 Cloudflare Pages Functions、Telegram Bot API 和可选 Cloudflare KV 管理能力构建的独立文件与图片托管项目。
+T-IMG 是基于 Cloudflare Pages Functions、Telegram Bot API 和 Cloudflare KV 图片元数据构建的独立文件与图片托管项目。
 
 ## 主要能力
 
 - 将文件上传到 Telegram，并通过同域 `/file/:id` 地址访问。
 - 使用后端校验密码、签名 HttpOnly 会话 Cookie 和 KV 登录限流保护上传页面及 `POST /upload`。
 - 默认限制单文件 20 MiB，确保可通过公共 Bot API 取回。
-- 可选 KV 元数据、画廊管理、黑白名单和内容审核。
+- 使用必需的 `img_url` KV 保存图片元数据，并提供画廊管理、黑白名单和内容审核。
 - 管理接口可启用 HTTP Basic Auth。
 - 不加载第三方遥测，不向客户端暴露凭据、请求头或内部服务错误。
 - 主入口采用规范命名，同时兼容旧静态路径和驼峰式管理 API。
@@ -47,7 +47,7 @@ npm run ci-test
 npm start
 ```
 
-`npm run ci-test` 会启动本地 Wrangler Pages 环境并执行完整测试。写在 `package.json` 中的本地后台与上传认证值仅用于测试，禁止作为生产凭据。
+`npm run ci-test` 会启动本地 Wrangler Pages 环境并执行完整测试，其中包含真实 HTTP 登录、会话、退出和上传路由冒烟流程。写在 `package.json` 中的本地后台与上传认证值仅用于测试，禁止作为生产凭据。
 
 ## 配置
 
@@ -60,7 +60,7 @@ npm start
 | `UPLOAD_SESSION_SECRET` | 必需 | 密钥 | 仅供后端使用的 HMAC 会话签名密钥 |
 | `UPLOAD_SESSION_MAX_AGE` | 可选 | 文本 | 会话有效期秒数，默认 7 天 |
 | `UPLOAD_AUTH_KV` | 必需 | KV Namespace 绑定 | 专用于登录失败限流的 KV |
-| `img_url` | 可选 | KV Namespace 绑定 | 图片元数据、后台管理和名单数据 |
+| `img_url` | 必需 | KV Namespace 绑定 | 图片元数据、后台管理和名单数据 |
 | `BASIC_USER` | 建议配置 | 文本 | 后台 Basic Auth 用户名 |
 | `BASIC_PASS` | 建议配置 | 密钥 | 后台 Basic Auth 密码 |
 | `ModerateContentApiKey` | 可选 | 密钥 | 旧 Telegraph 文件的内容审核 |
@@ -75,8 +75,9 @@ npm start
 1. 在 Cloudflare Pages 项目的 `Settings > Variables and Secrets` 中新增加密 Secret：`UPLOAD_ACCESS_PASSWORD`，值填写你希望用户输入的强密码。
 2. 再新增加密 Secret：`UPLOAD_SESSION_SECRET`，值使用独立的长随机字符串。它只供后端签名会话，用户不需要知道，也不能与访问密码相同。
 3. 新增普通变量 `UPLOAD_SESSION_MAX_AGE=604800`，表示登录状态保持 7 天。
-4. 创建独立 Workers KV，并以变量名 `UPLOAD_AUTH_KV` 绑定到 Pages 项目，用于错误密码限流。
-5. 将 Pages Functions 的 Fail open / closed 设置为 `Fail closed`，然后重新部署。
+4. 创建图片元数据 Workers KV，并以变量名 `img_url` 绑定到 Pages 项目。它是必需绑定，不能添加成普通文本变量。
+5. 再创建一个独立 Workers KV，并以变量名 `UPLOAD_AUTH_KV` 绑定到 Pages 项目，用于错误密码限流；不要与 `img_url` 共用。
+6. 将 Pages Functions 的 Fail open / closed 设置为 `Fail closed`，然后重新部署。
 
 配置完成后，用户打开上传页面会先进入 `/upload-login`；输入与 `UPLOAD_ACCESS_PASSWORD` 相同的密码后才能使用上传界面。密码错误、会话过期或主动退出后都会重新禁止访问。随机密钥生成方法、Cloudflare 控制台逐步操作和验收清单见[部署说明](docs/DEPLOYMENT.md)。
 

@@ -40,10 +40,28 @@ function jsonResponse(body, status, extraHeaders = {}) {
   });
 }
 
-function requireTelegramConfig(env) {
-  if (!env.TG_Bot_Token || !env.TG_Chat_ID) {
+function requireUploadServiceConfig(env = {}) {
+  const botToken = typeof env.TG_Bot_Token === "string" ? env.TG_Bot_Token.trim() : "";
+  const chatId = typeof env.TG_Chat_ID === "string" ? env.TG_Chat_ID.trim() : "";
+  const missingTelegramBindings = [];
+  if (!botToken) missingTelegramBindings.push("TG_Bot_Token");
+  if (!chatId) missingTelegramBindings.push("TG_Chat_ID");
+
+  if (missingTelegramBindings.length > 0) {
+    console.error("Upload configuration missing:", missingTelegramBindings.join(", "));
     throw new UploadError(503, "telegram_not_configured", "Upload service is not configured");
   }
+
+  if (!env.img_url || typeof env.img_url.put !== "function") {
+    console.error("Upload configuration missing or invalid: img_url");
+    throw new UploadError(503, "image_index_not_configured", "Upload service is not configured");
+  }
+
+  return {
+    botToken,
+    chatId,
+    imageIndex: env.img_url,
+  };
 }
 
 function resolveUploadLimit(env) {
@@ -97,9 +115,9 @@ function validateUploadFile(uploadFile, env) {
   }
 }
 
-function createTelegramFormData(uploadFile, env, target) {
+function createTelegramFormData(uploadFile, uploadConfig, target) {
   const formData = new FormData();
-  formData.append("chat_id", env.TG_Chat_ID);
+  formData.append("chat_id", uploadConfig.chatId);
   formData.append(target.field, uploadFile, sanitizeFileName(uploadFile.name));
   return formData;
 }
@@ -108,13 +126,13 @@ async function waitBeforeRetry(retryCount) {
   await new Promise((resolve) => setTimeout(resolve, 250 * (retryCount + 1)));
 }
 
-async function sendToTelegram(uploadFile, target, env, retryCount = 0) {
-  const apiUrl = `https://api.telegram.org/bot${env.TG_Bot_Token}/${target.endpoint}`;
+async function sendToTelegram(uploadFile, target, uploadConfig, retryCount = 0) {
+  const apiUrl = `https://api.telegram.org/bot${uploadConfig.botToken}/${target.endpoint}`;
 
   try {
     const response = await fetch(apiUrl, {
       method: "POST",
-      body: createTelegramFormData(uploadFile, env, target),
+      body: createTelegramFormData(uploadFile, uploadConfig, target),
     });
     const responseData = await response.json().catch(() => null);
 
@@ -126,7 +144,7 @@ async function sendToTelegram(uploadFile, target, env, retryCount = 0) {
       return sendToTelegram(
         uploadFile,
         { endpoint: "sendDocument", field: "document" },
-        env,
+        uploadConfig,
         retryCount,
       );
     }
@@ -139,7 +157,7 @@ async function sendToTelegram(uploadFile, target, env, retryCount = 0) {
     }
     if (retryCount < MAX_NETWORK_RETRIES) {
       await waitBeforeRetry(retryCount);
-      return sendToTelegram(uploadFile, target, env, retryCount + 1);
+      return sendToTelegram(uploadFile, target, uploadConfig, retryCount + 1);
     }
     console.warn("Telegram upload failed after network retries");
     throw new UploadError(502, "telegram_network_error", "Upload service is temporarily unavailable");
@@ -174,7 +192,7 @@ export async function onRequestPost(context) {
       throw new UploadError(401, "upload_auth_required", "Upload authentication is required");
     }
 
-    requireTelegramConfig(env);
+    const uploadConfig = requireUploadServiceConfig(env);
 
     let formData;
     try {
@@ -188,7 +206,11 @@ export async function onRequestPost(context) {
 
     const fileName = sanitizeFileName(uploadFile.name);
     const fileExtension = getSafeExtension(fileName, String(uploadFile.type || "").toLowerCase());
-    const telegramResponse = await sendToTelegram(uploadFile, getTelegramTarget(uploadFile), env);
+    const telegramResponse = await sendToTelegram(
+      uploadFile,
+      getTelegramTarget(uploadFile),
+      uploadConfig,
+    );
     const fileId = getFileId(telegramResponse);
 
     if (!fileId || !/^[A-Za-z0-9_-]+$/.test(fileId)) {
@@ -196,21 +218,21 @@ export async function onRequestPost(context) {
     }
 
     const storageKey = `${fileId}.${fileExtension}`;
-    if (env.img_url) {
-      try {
-        await env.img_url.put(storageKey, "", {
-          metadata: {
-            TimeStamp: Date.now(),
-            ListType: "None",
-            Label: "None",
-            liked: false,
-            fileName,
-            fileSize: uploadFile.size,
-          },
-        });
-      } catch {
-        console.warn("Upload metadata write failed");
-      }
+    try {
+      await uploadConfig.imageIndex.put(storageKey, "", {
+        metadata: {
+          TimeStamp: Date.now(),
+          ListType: "None",
+          Label: "None",
+          liked: false,
+          fileName,
+          fileSize: uploadFile.size,
+        },
+      });
+    } catch {
+      // Telegram already accepted the file. Reporting a failure here would encourage
+      // a duplicate upload, so keep the public result and record only a safe warning.
+      console.warn("Upload metadata write failed after Telegram accepted the file");
     }
 
     return jsonResponse([{ src: `/file/${storageKey}` }], 200);

@@ -20,6 +20,7 @@ describe("repository naming conventions", function () {
       "assets/styles/admin-gallery.css",
       "assets/styles/upload-login.css",
       "assets/scripts/upload-login.js",
+      "assets/scripts/upload-feedback.js",
       "_routes.json",
     ];
 
@@ -46,6 +47,14 @@ describe("repository naming conventions", function () {
     const protectedPaths = ["/", "/index", "/index.html", "/markdown-upload", "/markdown-upload.html", "/upload-login", "/upload-login.html", "/upload"];
     for (const path of protectedPaths) {
       assert.equal(routes.include.includes(path), true, `${path} must invoke the authentication middleware`);
+    }
+  });
+
+  it("loads safe upload error feedback on every upload page", function () {
+    const scriptTag = '<script src="/assets/scripts/upload-feedback.js"></script>';
+    for (const page of ["index.html", "markdown-upload.html"]) {
+      const html = readFileSync(page, "utf8");
+      assert.equal(html.includes(scriptTag), true, `${page} must load upload feedback`);
     }
   });
 

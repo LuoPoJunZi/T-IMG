@@ -14,6 +14,15 @@ function basic(user, pass) {
   return `Basic ${btoa(`${user}:${pass}`)}`;
 }
 
+function managementBinding() {
+  return {
+    getWithMetadata: async () => ({ value: null, metadata: null }),
+    put: async () => {},
+    delete: async () => {},
+    list: async () => ({ keys: [], list_complete: true }),
+  };
+}
+
 describe("management middleware", function () {
   const [errorHandling, authentication] = middleware;
 
@@ -22,10 +31,21 @@ describe("management middleware", function () {
     assert.equal(response.status, 503);
   });
 
+  it("rejects a text value or incomplete object in place of the img_url KV binding", async function () {
+    for (const imgUrl of ["not-a-kv-binding", {}]) {
+      const response = await authentication({
+        request: request(),
+        env: { img_url: imgUrl },
+        next: () => new Response("ok"),
+      });
+      assert.equal(response.status, 503);
+    }
+  });
+
   it("rejects incomplete authentication configuration", async function () {
     const response = await authentication({
       request: request(),
-      env: { img_url: {}, BASIC_USER: "admin" },
+      env: { img_url: managementBinding(), BASIC_USER: "admin" },
       next: () => new Response("ok"),
     });
     assert.equal(response.status, 503);
@@ -34,7 +54,7 @@ describe("management middleware", function () {
   it("returns a Basic challenge when credentials are missing", async function () {
     const response = await authentication({
       request: request(),
-      env: { img_url: {}, BASIC_USER: "admin", BASIC_PASS: "secret" },
+      env: { img_url: managementBinding(), BASIC_USER: "admin", BASIC_PASS: "secret" },
       next: () => new Response("ok"),
     });
     assert.equal(response.status, 401);
@@ -42,7 +62,7 @@ describe("management middleware", function () {
   });
 
   it("rejects malformed and invalid credentials without throwing", async function () {
-    const env = { img_url: {}, BASIC_USER: "admin", BASIC_PASS: "secret" };
+    const env = { img_url: managementBinding(), BASIC_USER: "admin", BASIC_PASS: "secret" };
     const malformed = await authentication({
       request: request({ Authorization: "Basic !!!" }), env, next: () => new Response("ok"),
     });
@@ -58,7 +78,7 @@ describe("management middleware", function () {
     let calls = 0;
     const response = await authentication({
       request: request({ Authorization: basic("admin", "secret") }),
-      env: { img_url: {}, BASIC_USER: "admin", BASIC_PASS: "secret" },
+      env: { img_url: managementBinding(), BASIC_USER: "admin", BASIC_PASS: "secret" },
       next: () => { calls += 1; return new Response("ok"); },
     });
 

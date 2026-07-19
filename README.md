@@ -2,14 +2,14 @@
 
 English | [简体中文](README.zh-CN.md)
 
-T-IMG is an independently maintained file and image hosting project built with Cloudflare Pages Functions, Telegram Bot API, and optional Cloudflare KV management.
+T-IMG is an independently maintained file and image hosting project built with Cloudflare Pages Functions, Telegram Bot API, and Cloudflare KV-backed image metadata.
 
 ## Features
 
 - Uploads files to Telegram and serves stable same-origin `/file/:id` URLs.
 - Protects upload pages and `POST /upload` with a backend-verified password, signed HttpOnly session cookie, and KV-backed login throttling.
 - Limits uploads to 20 MiB by default so files remain retrievable through the public Bot API.
-- Supports optional KV-backed metadata, gallery management, blocklists, allowlists, and content review.
+- Stores image metadata in the required `img_url` KV binding and supports gallery management, blocklists, allowlists, and content review.
 - Provides optional HTTP Basic authentication for management routes.
 - Removes third-party telemetry and avoids exposing credentials, request headers, or external-service error details.
 - Keeps legacy static URLs and camelCase management APIs compatible while using standardized canonical names.
@@ -47,7 +47,7 @@ npm run ci-test
 npm start
 ```
 
-`npm run ci-test` starts a local Wrangler Pages environment and runs the complete test suite. Local management and upload-auth values in `package.json` are test-only and must never be reused in production.
+`npm run ci-test` starts a local Wrangler Pages environment and runs the complete suite, including an HTTP login, session, logout, and upload-route smoke flow. Local management and upload-auth values in `package.json` are test-only and must never be reused in production.
 
 ## Configuration
 
@@ -60,7 +60,7 @@ npm start
 | `UPLOAD_SESSION_SECRET` | Yes | Secret | Backend-only HMAC session signing key |
 | `UPLOAD_SESSION_MAX_AGE` | No | Text | Session lifetime in seconds; defaults to 7 days |
 | `UPLOAD_AUTH_KV` | Yes | KV namespace binding | Dedicated storage for failed-login throttling |
-| `img_url` | No | KV namespace binding | Image metadata, management, and list data |
+| `img_url` | Yes | KV namespace binding | Image metadata, management, and list data |
 | `BASIC_USER` | Recommended | Text | Management Basic Auth username |
 | `BASIC_PASS` | Recommended | Secret | Management Basic Auth password |
 | `ModerateContentApiKey` | No | Secret | Content review for legacy Telegraph files |
@@ -70,7 +70,7 @@ Copy variable names from [`.env.example`](.env.example), but configure real prod
 
 ### Upload access quick setup
 
-The site owner chooses the password visitors enter on `/upload-login` and stores it as the encrypted Cloudflare Secret `UPLOAD_ACCESS_PASSWORD`. Configure a different random encrypted Secret as `UPLOAD_SESSION_SECRET`, set `UPLOAD_SESSION_MAX_AGE=604800` for a seven-day session, bind a dedicated Workers KV namespace as `UPLOAD_AUTH_KV`, and set Pages Functions to fail closed before redeploying. The session secret is an internal signing key and is never entered by visitors. The [deployment guide](docs/DEPLOYMENT.md) includes the dashboard walkthrough, safe key-generation commands, and acceptance checks.
+The site owner chooses the password visitors enter on `/upload-login` and stores it as the encrypted Cloudflare Secret `UPLOAD_ACCESS_PASSWORD`. Configure a different random encrypted Secret as `UPLOAD_SESSION_SECRET`, set `UPLOAD_SESSION_MAX_AGE=604800` for a seven-day session, bind the required image metadata KV as `img_url`, bind a separate throttling KV as `UPLOAD_AUTH_KV`, and set Pages Functions to fail closed before redeploying. The session secret is an internal signing key and is never entered by visitors. The [deployment guide](docs/DEPLOYMENT.md) includes the dashboard walkthrough, safe key-generation commands, and acceptance checks.
 
 ## Public Routes
 
