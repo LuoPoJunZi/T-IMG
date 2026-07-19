@@ -11,13 +11,14 @@
 - JavaScript 标识符使用 camelCase，类名使用 PascalCase，常量仅在确为全局常量时使用 UPPER_SNAKE_CASE。
 - 区域化文档使用 BCP 47 风格后缀，例如 `README.zh-CN.md`。
 - 社区和工具约定文件保留其标准名称，例如 `README.md`、`LICENSE`、`CHANGELOG.md`、`AGENTS.md`、`.gitignore` 和 `_redirects`。
-- 资源按用途放入 `assets/images/`、`assets/icons/`、`assets/styles/`；站点根目录只保留入口页面和必须位于根目录的约定文件。
+- 资源按用途放入 `assets/images/`、`assets/icons/`、`assets/styles/`、`assets/scripts/`；站点根目录只保留入口页面和必须位于根目录的约定文件。
 - 文档集中在 `docs/`，文件名使用大写单词和下划线，以与现有维护文档保持一致。
 
 ## Cloudflare 与构建约定
 
 - Pages Functions 的 `_middleware.js`、动态参数 `[id].js` 和目录入口 `index.js` 必须保留框架名称。
 - `functions/` 下的目录直接决定公开 API 路径。新路由使用 kebab-case；已经发布的旧路由不得无兼容层直接删除。
+- 根目录 `_routes.json` 控制哪些请求必须进入 Functions；涉及认证页面时不得删除或放宽对应规则。由 Function 生成或包装的响应头必须在后端代码中设置，不能依赖静态 `_headers` 规则。
 - `_nuxt/` 是既有生成产物，哈希文件名和字体文件名不得手工改名；修改入口引用时必须同步检查对应构建产物。
 - `_redirects` 保存旧静态 URL 到规范名称的永久重定向。删除兼容项前必须确认生产访问日志和外部调用方均不再使用旧路径。
 

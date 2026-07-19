@@ -80,4 +80,37 @@
 
 ### 当前状态
 
-本地 `main` 已完成发布前验证并形成独立发布基线；个人仓库配置、首次推送和部署仍待执行。首次推送后由 GitHub Actions 再执行一次云端验证。
+发布基线已提交并推送到独立公开仓库 `LuoPoJunZi/T-IMG` 的 `main`，GitHub Actions 验证通过；仓库仅配置自己的 `origin`，生产 Cloudflare 部署仍待执行。
+
+## 2026-07-19：上传页面后端访问保护
+
+### 目标与现状分析
+
+- 确认 `index.html` 和 `markdown-upload.html` 原为可直接访问的静态页面，`POST /upload` 没有上传访问认证。
+- 确认后台管理使用独立 Basic Auth，公开 `/file/:id` 不应受新认证影响。
+- 确认 Cloudflare Pages Clean URLs 会提供 `/index`、`/markdown-upload` 等无扩展名入口，必须与 `.html` 路径同时进入 Function。
+- 修改前系统 Node.js `v20.15.0` 下原有 31 项测试通过；Wrangler 4 因要求 Node.js 22 未能启动，作为环境基线记录。
+
+### 已完成
+
+- 新增根级 Pages Functions 中间件和 `_routes.json`，保护 `/`、`/index[.html]`、`/markdown-upload[.html]`，未认证时后端跳转 `/upload-login`。
+- 新增上传密码登录页，以及登录、会话状态和退出 API；原上传页面增加后端退出表单。
+- 使用 Web Crypto HMAC-SHA256 签名含签发时间、过期时间和随机数的会话令牌；Cookie 使用 `__Host-`、`HttpOnly`、`Secure`、`SameSite=Strict` 和 `Path=/`。
+- `POST /upload` 再次验证上传会话并拒绝浏览器跨站请求；有效后台 Basic Auth 继续允许管理画廊批量上传。
+- 新增独立 `UPLOAD_AUTH_KV`，对匿名化客户端地址记录 10 分钟窗口内的失败次数，第 5 次失败起返回 429；关键配置或限流存储不可用时失败关闭。
+- 登录请求限制为 8 KiB，仅接受 JSON 或 URL 编码表单；返回路径在前后端均使用固定上传页白名单，避免开放重定向。
+- 安全审查后将登录页脚本和样式移到同源静态文件，由 Function 设置严格 CSP、禁止缓存、禁止嵌入和最小权限响应头。
+- 同步 `.env.example`、中英文 README、部署、项目概览、需求、计划、决策、命名规范和变更记录。
+
+### 验证
+
+- Node.js `v22.23.1` 下 `npm run ci-test` 退出码 0；Wrangler 4 启动本地 Pages 环境，50 项测试全部通过、0 失败。
+- npm 官方注册表 `npm audit --audit-level=high`：0 个已知漏洞。
+- 真实本地 HTTP 流程：五个上传页入口未认证均为 302；登录页 200；未认证 `/upload` 为 401；错误密码为 401；正确密码建立会话后上传页为 200；退出后重新为 302。
+- `/file/*` 与 `/api/manage/*` 未被上传页面中间件重定向；现有文件代理和后台测试继续通过。
+- 登录页实际响应包含严格 `Content-Security-Policy`、`X-Frame-Options: DENY`、`Cache-Control: private, no-store`、`Referrer-Policy: no-referrer`。
+- 未调用真实 Telegram、生产 KV、内容审核服务或 Cloudflare Pages 项目。
+
+### 当前状态
+
+DEV-009 已在本地完成但尚未提交、推送或部署。生产启用前必须在 Cloudflare 配置两个 Secret、会话时长、独立 `UPLOAD_AUTH_KV`，并把 Pages Functions 配额行为设置为 Fail closed。

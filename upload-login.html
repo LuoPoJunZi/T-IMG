@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self'; form-action 'self'; script-src 'self'; style-src 'self'; base-uri 'none'; object-src 'none'">
+    <meta name="referrer" content="no-referrer">
+    <title>T-IMG 上传验证</title>
+    <link rel="stylesheet" href="/assets/styles/upload-login.css">
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">T</div>
+      <h1>验证后继续上传</h1>
+      <p class="lead">请输入站点所有者提供的上传访问密码。验证状态会通过安全 Cookie 在一段时间内保持。</p>
+      <form id="login-form" method="post" action="/api/upload-auth/login">
+        <input id="return-to" name="returnTo" type="hidden" value="/">
+        <label for="password">访问密码</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password" maxlength="512" autofocus>
+        <button id="submit-button" type="submit">验证并进入</button>
+      </form>
+      <p id="message" role="alert" aria-live="polite"></p>
+      <p class="hint">密码只会发送给当前站点后端校验，不会保存在页面脚本或 localStorage 中。</p>
+    </main>
+    <script src="/assets/scripts/upload-login.js" defer></script>
+  </body>
+</html>

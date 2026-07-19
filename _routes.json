@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "include": [
+    "/",
+    "/index",
+    "/index.html",
+    "/markdown-upload",
+    "/markdown-upload.html",
+    "/upload-login",
+    "/upload-login.html",
+    "/upload",
+    "/api/*",
+    "/file/*"
+  ],
+  "exclude": []
+}

@@ -109,6 +109,19 @@
 - 优先级：高
 - 状态：已完成
 
+### DEV-009
+
+- 需求名称：上传页面后端访问保护
+- 需求描述：访问主上传页或 Markdown 上传页前必须通过后端密码验证；使用 HMAC 签名的安全 Cookie 保持会话；页面和 `POST /upload` 双重校验；提供退出能力并限制连续失败尝试。
+- 用户价值：防止未授权访客看到上传界面或绕过页面直接消耗 Telegram、Cloudflare 和项目配额。
+- 涉及页面：`index.html`、`markdown-upload.html`、新增 `upload-login.html`，同时保护 Pages Clean URLs 的 `/index` 和 `/markdown-upload` 等价路径。
+- 涉及接口：新增 `POST /api/upload-auth/login`、`POST /api/upload-auth/logout`、`GET /api/upload-auth/session`；`POST /upload` 成功响应保持不变，未认证返回 401，跨站请求返回 403，配置缺失返回 503。
+- 配置要求：`UPLOAD_ACCESS_PASSWORD` 至少 12 字符、`UPLOAD_SESSION_SECRET` 至少 32 字符并保存为 Cloudflare Secret；`UPLOAD_SESSION_MAX_AGE` 默认 604800 秒；独立绑定 `UPLOAD_AUTH_KV` 保存匿名化登录失败计数；Pages Functions 配额设置为 Fail closed。
+- 兼容要求：`/file/:id` 继续公开；后台管理认证与路由不改变；有效后台 Basic Auth 可继续调用 `/upload`，保持画廊批量上传。
+- 验收标准：未认证页面跳转登录、未认证接口返回 401、正确/错误密码、刷新保持、篡改/过期会话、退出、第五次失败限流、跨站请求、Clean URLs、公开文件和后台路由均有自动化或真实 HTTP 验证；仓库无真实密码。
+- 优先级：高
+- 状态：已完成
+
 ## 非功能需求
 
 - 安全优先于兼容、功能、维护性和界面美观。
@@ -119,25 +132,25 @@
 
 ## 兼容性要求
 
-- 保留现有静态页面路径、Functions 路由、HTTP 方法和响应结构。
+- 保留现有静态页面路径、Functions 路由、HTTP 方法和成功响应结构；认证失败可返回新增的 401、403、429 或 503。
 - 保留 Telegram 上传、同域 `/file/` 访问、可选 KV 管理和 Cloudflare Pages 部署方式。
-- 不把项目迁移到新前端框架，不更换存储或认证架构。
+- 不把项目迁移到新前端框架，不更换存储或现有后台认证架构。
 
 ## 安全要求
 
 - 不提交 Telegram Token、Chat ID、管理密码、审核 API Key、Cloudflare 凭据、Cookie 或 Authorization Header。
 - 示例配置只使用占位值；本地 `.env*` 文件默认忽略，仅跟踪 `.env.example`。
 - 错误、遥测和日志中的敏感信息不得暴露凭据、请求头、文件标识、环境对象或堆栈，并需由回归测试或静态检查验证。
+- 上传密码只在后端校验；会话 Cookie 必须使用 `HttpOnly`、`Secure`、`SameSite=Strict` 和 `__Host-` 约束；浏览器状态不得依赖 localStorage。
 
 ## 非目标
 
-- 除将自有品牌统一为 `T-IMG`、清理遥测以及错误链路所需的兼容修复外，本次不重设计 Logo、布局或上传交互。
-- 本次不增加上传进度、复制格式、搜索、分页或批量管理等示例功能。
-- 不更换 Telegram 与 KV 存储架构，不改变现有成功响应和公开路径。
-- 本次不部署、不推送、不修改 Git 远程。
+- DEV-009 不重设计原有上传、拖拽、进度或结果展示交互，只新增认证入口和退出按钮。
+- DEV-009 不把已上传文件改为私有，不修改 `/file/:id` 的公开访问语义。
+- 不更换 Telegram 与图片元数据 KV 存储架构，不替换现有后台 Basic Auth。
+- 本轮不创建或修改生产 Cloudflare 资源，不部署生产环境；生产 Secret 和 KV 绑定由项目所有者配置。
 
 ## 待确认事项
 
-- 原总任务说明中的十项示例功能仍不进入开发清单；本轮只处理已确认的更名、既有问题修复、仓库标准化和公开发布准备。
-- 个人 GitHub 仓库地址、未来品牌信息、目标 UI、生产域名和 Cloudflare 项目配置待确认。
-- 生产 Cloudflare 绑定、真实 Telegram/KV/内容审核联调和仓库远程地址仍待项目所有者后续安排。
+- 原总任务说明中的其他示例功能仍不进入开发清单；只实施项目所有者单独确认的正式需求。
+- 生产域名、Cloudflare Pages 项目、`UPLOAD_AUTH_KV`、真实 Telegram/KV/内容审核联调仍待项目所有者配置和隔离验证。

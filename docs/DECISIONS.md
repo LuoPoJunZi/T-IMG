@@ -81,3 +81,13 @@
 - 决策：运行基线升级到 Node.js 22 和 Wrangler 4；测试迁移到 Node 内置测试运行器；CI 在 `main` 推送、Pull Request 和手动触发时运行，并将 GitHub 官方 Action 固定到完整提交 SHA。
 - 原因：旧运行基线和测试依赖已过时；内置测试运行器减少依赖面，升级后 npm 官方安全审计为 0 漏洞。
 - 相关需求：DEV-008
+
+## ADR-011：上传访问使用独立密码和签名 Cookie 会话
+
+- 日期：2026-07-19
+- 状态：已接受
+- 决策：上传页面由根级 Pages Functions 中间件保护；密码只在后端校验，成功后签发 HMAC-SHA256 签名的 `__Host-`、`HttpOnly`、`Secure`、`SameSite=Strict` Cookie；`POST /upload` 再次验证会话并拒绝浏览器跨站请求。登录失败使用独立 `UPLOAD_AUTH_KV` 做匿名化基础限流，缺少关键配置时失败关闭。
+- 原因：前端隐藏或 localStorage 标记可被绕过；无状态签名会话适合 Pages Functions，不需要新增运行依赖；独立限流 KV 不污染 `img_url` 图片索引。
+- 兼容：`/file/:id` 保持公开，后台管理认证不变；有效后台 Basic Auth 仍可调用 `/upload`，以保持画廊批量上传。`_routes.json` 同时包含 `.html` 与 Pages Clean URLs 等价路径，生产配额行为必须设置为 Fail closed。
+- 限制：Cloudflare KV 计数最终一致，只提供基础暴力破解防护；高风险部署应叠加边缘 WAF/Rate Limiting 或 Access。
+- 相关需求：DEV-009

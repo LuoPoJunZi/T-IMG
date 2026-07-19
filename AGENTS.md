@@ -9,10 +9,10 @@
 - 维护定位：T-IMG 是独立公开仓库，不建立 fork、外部远程或自动代码同步关系；在项目所有者确认需求后进行小步、可验证的长期开发。
 - 当前目标：修复已确认的本地稳定性与安全问题；未经确认不得把总任务文档中的示例功能当作待开发事项。
 - 主要平台：Cloudflare Pages、Pages Functions、Workers Runtime、Cloudflare KV、Telegram Bot API。
-- 静态入口：`index.html`、`markdown-upload.html`；管理入口包括 `admin.html`、`admin-gallery.html` 和 `admin-waterfall.html`。
-- 后端目录：`functions/`；测试目录：`test/`；CI 与同步配置：`.github/workflows/`。
-- 核心入口：`functions/upload.js`、`functions/file/[id].js`、`functions/api/manage/`、`functions/utils/middleware.js`。
-- 核心 API：`POST /upload`、`/file/:id`、`/api/manage/list`、`/api/manage/check`、`/api/manage/login`、`/api/manage/logout`、`/api/manage/{block|white|delete|toggle-like|edit-name}/:id`；旧驼峰路由仅作为兼容入口保留。
+- 静态入口：`index.html`、`markdown-upload.html`；上传验证入口为 `upload-login.html`；管理入口包括 `admin.html`、`admin-gallery.html` 和 `admin-waterfall.html`。
+- 后端目录：`functions/`；测试目录：`test/`；CI 配置：`.github/workflows/`。
+- 核心入口：`functions/_middleware.js`、`functions/upload.js`、`functions/file/[id].js`、`functions/api/upload-auth/`、`functions/api/manage/`、`functions/utils/middleware.js`。
+- 核心 API：`POST /upload`、`/file/:id`、`/api/upload-auth/{login|logout|session}`、`/api/manage/list`、`/api/manage/check`、`/api/manage/login`、`/api/manage/logout`、`/api/manage/{block|white|delete|toggle-like|edit-name}/:id`；旧驼峰路由仅作为兼容入口保留。
 
 ## 开发原则
 

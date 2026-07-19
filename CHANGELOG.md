@@ -11,6 +11,7 @@
 - 增加上传、文件代理、管理认证和管理操作回归测试。
 - 增加可选的 `MAX_UPLOAD_SIZE_BYTES` 上传限制配置。
 - 增加仓库文件命名规范、静态路径兼容重定向及规范管理 API 路由。
+- 增加上传访问登录页、后端密码校验、签名 Cookie 会话、退出接口和 KV 登录限流。
 
 ### Changed
 
@@ -23,6 +24,7 @@
 - `node_modules/` 不再由 Git 跟踪，依赖统一通过 `package-lock.json` 和 `npm ci` 恢复。
 - 静态页面和资源改用语义化 kebab-case，资源归档到 `assets/images`、`assets/icons` 和 `assets/styles`；中文 README 改为 `README.zh-CN.md`。
 - 管理页面改用 `/api/manage/edit-name/:id` 和 `/api/manage/toggle-like/:id`，旧驼峰路径继续兼容。
+- 上传页面及 Pages Clean URLs 等价路径改由根级 Functions 中间件保护；`POST /upload` 同时校验上传会话或有效后台 Basic Auth。
 
 ### Fixed
 
@@ -32,6 +34,7 @@
 - 修复文件代理向外部转发 Authorization、Cookie 等原始请求头的问题。
 - 修复仅凭管理页 Referer 绕过黑白名单的问题；启用 Basic Auth 后预览必须携带有效凭据。
 - 修复 Telegram 文件查询失败后继续请求无效外部地址的问题。
+- 修复可直接打开静态上传页或绕过页面调用 `/upload` 的未授权访问问题。
 
 ### Security
 
@@ -41,3 +44,5 @@
 - GitHub Actions 在 `main` 推送、Pull Request 和手动触发时运行，官方 Action 固定到完整提交 SHA。
 - 增加 `.gitattributes`、`.editorconfig`、贡献指南、安全策略和 Pull Request 模板。
 - Telegram 文件不会把包含 Bot Token 的下载地址发送给第三方内容审核服务。
+- 上传会话使用 HMAC-SHA256 和 `__Host-` HttpOnly/Secure/SameSite Cookie，不在前端或 localStorage 保存凭据；登录页启用严格 CSP，认证与上传接口拒绝浏览器跨站请求。
+- 连续错误密码使用独立 `UPLOAD_AUTH_KV` 做 5 次/10 分钟基础限流，认证配置缺失时失败关闭。

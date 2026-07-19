@@ -7,6 +7,7 @@ T-IMG is an independently maintained file and image hosting project built with C
 ## Features
 
 - Uploads files to Telegram and serves stable same-origin `/file/:id` URLs.
+- Protects upload pages and `POST /upload` with a backend-verified password, signed HttpOnly session cookie, and KV-backed login throttling.
 - Limits uploads to 20 MiB by default so files remain retrievable through the public Bot API.
 - Supports optional KV-backed metadata, gallery management, blocklists, allowlists, and content review.
 - Provides optional HTTP Basic authentication for management routes.
@@ -19,6 +20,7 @@ T-IMG is an independently maintained file and image hosting project built with C
 |---|---|
 | `index.html` | Primary upload page |
 | `markdown-upload.html` | Alternate upload page with Markdown output |
+| `upload-login.html` | Upload access login page |
 | `admin.html` | Management entry |
 | `admin-gallery.html` | Gallery management page |
 | `admin-waterfall.html` | Waterfall view |
@@ -45,7 +47,7 @@ npm run ci-test
 npm start
 ```
 
-`npm run ci-test` starts a local Wrangler Pages environment and runs the complete test suite. Local Basic Auth values in `package.json` are test-only and must never be reused in production.
+`npm run ci-test` starts a local Wrangler Pages environment and runs the complete test suite. Local management and upload-auth values in `package.json` are test-only and must never be reused in production.
 
 ## Configuration
 
@@ -54,6 +56,10 @@ npm start
 | `TG_Bot_Token` | Yes | Telegram Bot Token |
 | `TG_Chat_ID` | Yes | Target channel or group ID |
 | `MAX_UPLOAD_SIZE_BYTES` | No | Upload limit up to 20 MiB |
+| `UPLOAD_ACCESS_PASSWORD` | Yes | Upload-page access password; configure as a Cloudflare Secret |
+| `UPLOAD_SESSION_SECRET` | Yes | HMAC session signing key; configure as a Cloudflare Secret |
+| `UPLOAD_SESSION_MAX_AGE` | No | Session lifetime in seconds; defaults to 7 days |
+| `UPLOAD_AUTH_KV` | Yes | Dedicated KV binding for failed-login throttling |
 | `img_url` | No | Cloudflare KV namespace binding |
 | `BASIC_USER`, `BASIC_PASS` | Recommended | Management Basic Auth |
 | `ModerateContentApiKey` | No | Content review for legacy Telegraph files |
@@ -64,11 +70,16 @@ Copy variable names from [`.env.example`](.env.example), but configure real prod
 ## Public Routes
 
 - `POST /upload`
+- `POST /api/upload-auth/login`
+- `POST /api/upload-auth/logout`
+- `GET /api/upload-auth/session`
 - `GET|HEAD /file/:id`
 - `/api/manage/list`
 - `/api/manage/{block|white|delete|edit-name|toggle-like}/:id`
 
 Legacy static paths are redirected through [`_redirects`](_redirects). Legacy `editName` and `toggleLike` APIs remain as compatibility aliases.
+
+Upload pages and `POST /upload` require an upload session. A valid configured management Basic Auth session remains accepted by `POST /upload` so gallery uploads continue to work. Existing `/file/:id` links remain public.
 
 ## GitHub Actions
 

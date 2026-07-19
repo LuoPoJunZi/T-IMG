@@ -2,10 +2,25 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { onRequestPost } from "../functions/upload.js";
 
-function uploadRequest(file) {
+const uploadAccessEnv = {
+  UPLOAD_ACCESS_PASSWORD: "test-upload-password",
+  UPLOAD_SESSION_SECRET: "test-session-secret-at-least-32-characters-long",
+  BASIC_USER: "admin",
+  BASIC_PASS: "management-secret",
+};
+
+function configuredEnv(extra = {}) {
+  return { ...uploadAccessEnv, ...extra };
+}
+
+function uploadRequest(file, authenticated = true, extraHeaders = {}) {
   const formData = new FormData();
   if (file !== undefined) formData.append("file", file);
-  return new Request("https://example.com/upload", { method: "POST", body: formData });
+  const authHeaders = authenticated
+    ? { Authorization: `Basic ${btoa("admin:management-secret")}` }
+    : {};
+  const headers = { ...authHeaders, ...extraHeaders };
+  return new Request("https://example.com/upload", { method: "POST", body: formData, headers });
 }
 
 function telegramResponse(result, status = 200) {
@@ -37,6 +52,47 @@ describe("upload endpoint", function () {
     console.warn = originalConsoleWarn;
   });
 
+  it("rejects direct uploads without a valid session or management login", async function () {
+    let fetchCalled = false;
+    globalThis.fetch = async () => {
+      fetchCalled = true;
+      return telegramResponse({ ok: true });
+    };
+
+    const response = await onRequestPost({
+      request: uploadRequest(new File(["data"], "image.png", { type: "image/png" }), false),
+      env: configuredEnv({ TG_Bot_Token: "test-token", TG_Chat_ID: "test-chat" }),
+    });
+
+    assert.equal(response.status, 401);
+    assert.equal((await responseJson(response)).code, "upload_auth_required");
+    assert.equal(fetchCalled, false);
+  });
+
+  it("fails closed when upload access protection is not configured", async function () {
+    const response = await onRequestPost({
+      request: uploadRequest(new File(["data"], "image.png", { type: "image/png" })),
+      env: { TG_Bot_Token: "test-token", TG_Chat_ID: "test-chat" },
+    });
+
+    assert.equal(response.status, 503);
+    assert.equal((await responseJson(response)).code, "upload_auth_not_configured");
+  });
+
+  it("rejects cross-site uploads even with otherwise valid credentials", async function () {
+    const response = await onRequestPost({
+      request: uploadRequest(
+        new File(["data"], "image.png", { type: "image/png" }),
+        true,
+        { Origin: "https://evil.example" },
+      ),
+      env: configuredEnv({ TG_Bot_Token: "test-token", TG_Chat_ID: "test-chat" }),
+    });
+
+    assert.equal(response.status, 403);
+    assert.equal((await responseJson(response)).code, "cross_site_request");
+  });
+
   it("rejects uploads when Telegram is not configured", async function () {
     let fetchCalled = false;
     globalThis.fetch = async () => {
@@ -46,7 +102,7 @@ describe("upload endpoint", function () {
 
     const response = await onRequestPost({
       request: uploadRequest(new File(["data"], "image.png", { type: "image/png" })),
-      env: {},
+      env: configuredEnv(),
     });
 
     assert.equal(response.status, 503);
@@ -57,7 +113,7 @@ describe("upload endpoint", function () {
   it("rejects an empty file", async function () {
     const response = await onRequestPost({
       request: uploadRequest(new File([], "empty.png", { type: "image/png" })),
-      env: { TG_Bot_Token: "test-token", TG_Chat_ID: "test-chat" },
+      env: configuredEnv({ TG_Bot_Token: "test-token", TG_Chat_ID: "test-chat" }),
     });
 
     assert.equal(response.status, 400);
@@ -67,11 +123,11 @@ describe("upload endpoint", function () {
   it("enforces the configured upload limit", async function () {
     const response = await onRequestPost({
       request: uploadRequest(new File(["1234"], "small.bin")),
-      env: {
+      env: configuredEnv({
         TG_Bot_Token: "test-token",
         TG_Chat_ID: "test-chat",
         MAX_UPLOAD_SIZE_BYTES: "3",
-      },
+      }),
     });
 
     assert.equal(response.status, 413);
@@ -87,7 +143,7 @@ describe("upload endpoint", function () {
 
     const response = await onRequestPost({
       request: uploadRequest(new File(["hello"], "unsafe\u0000name.invalid!", { type: "text/plain" })),
-      env: {
+      env: configuredEnv({
         TG_Bot_Token: "test-token",
         TG_Chat_ID: "test-chat",
         img_url: {
@@ -95,7 +151,7 @@ describe("upload endpoint", function () {
             stored = { key, value, options };
           },
         },
-      },
+      }),
     });
 
     assert.equal(response.status, 200);
@@ -113,11 +169,11 @@ describe("upload endpoint", function () {
 
     const response = await onRequestPost({
       request: uploadRequest(new File(["hello"], "file.txt", { type: "text/plain" })),
-      env: {
+      env: configuredEnv({
         TG_Bot_Token: "test-token",
         TG_Chat_ID: "test-chat",
         img_url: { put: async () => { throw new Error("KV unavailable"); } },
-      },
+      }),
     });
 
     assert.equal(response.status, 200);
@@ -132,7 +188,7 @@ describe("upload endpoint", function () {
 
     const response = await onRequestPost({
       request: uploadRequest(new File(["hello"], "file.txt", { type: "text/plain" })),
-      env: { TG_Bot_Token: "test-token", TG_Chat_ID: "test-chat" },
+      env: configuredEnv({ TG_Bot_Token: "test-token", TG_Chat_ID: "test-chat" }),
     });
     const body = await response.text();
 
@@ -151,7 +207,7 @@ describe("upload endpoint", function () {
 
     const response = await onRequestPost({
       request: uploadRequest(new File(["image"], "image.png", { type: "image/png" })),
-      env: { TG_Bot_Token: "test-token", TG_Chat_ID: "test-chat" },
+      env: configuredEnv({ TG_Bot_Token: "test-token", TG_Chat_ID: "test-chat" }),
     });
 
     assert.equal(response.status, 200);
@@ -167,7 +223,7 @@ describe("upload endpoint", function () {
 
     const response = await onRequestPost({
       request: uploadRequest(new File(["hello"], "file.txt", { type: "text/plain" })),
-      env: { TG_Bot_Token: "test-token", TG_Chat_ID: "test-chat" },
+      env: configuredEnv({ TG_Bot_Token: "test-token", TG_Chat_ID: "test-chat" }),
     });
     const body = await responseJson(response);
 

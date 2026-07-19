@@ -1,3 +1,5 @@
+import { getUploadRequestAuthorization, isSameOriginRequest } from "./upload-auth.js";
+
 // The public Bot API can accept larger documents, but getFile downloads are
 // limited to 20 MiB. Keep uploads retrievable through this application's proxy.
 const TELEGRAM_MAX_UPLOAD_SIZE = 20 * 1024 * 1024;
@@ -160,6 +162,18 @@ export async function onRequestPost(context) {
   const { request, env } = context;
 
   try {
+    if (!isSameOriginRequest(request)) {
+      throw new UploadError(403, "cross_site_request", "Upload request was rejected");
+    }
+
+    const authorization = await getUploadRequestAuthorization(request, env);
+    if (authorization.state === "configuration_error") {
+      throw new UploadError(503, "upload_auth_not_configured", "Upload access protection is not configured");
+    }
+    if (authorization.state !== "authorized") {
+      throw new UploadError(401, "upload_auth_required", "Upload authentication is required");
+    }
+
     requireTelegramConfig(env);
 
     let formData;

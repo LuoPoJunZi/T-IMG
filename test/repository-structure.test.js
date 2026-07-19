@@ -12,11 +12,15 @@ describe("repository naming conventions", function () {
       "README.zh-CN.md",
       "admin-gallery.html",
       "markdown-upload.html",
+      "upload-login.html",
       "image-blocked.html",
       "whitelist-enabled.html",
       "assets/images/background.svg",
       "assets/icons/music.svg",
       "assets/styles/admin-gallery.css",
+      "assets/styles/upload-login.css",
+      "assets/scripts/upload-login.js",
+      "_routes.json",
     ];
 
     for (const path of canonicalPaths) assert.equal(existsSync(path), true, `${path} must exist`);
@@ -35,6 +39,14 @@ describe("repository naming conventions", function () {
     ];
 
     for (const rule of expectedRules) assert.equal(redirects.includes(rule), true, `${rule} must remain`);
+  });
+
+  it("routes every upload page alias through Pages Functions", function () {
+    const routes = JSON.parse(readFileSync("_routes.json", "utf8"));
+    const protectedPaths = ["/", "/index", "/index.html", "/markdown-upload", "/markdown-upload.html", "/upload-login", "/upload-login.html", "/upload"];
+    for (const path of protectedPaths) {
+      assert.equal(routes.include.includes(path), true, `${path} must invoke the authentication middleware`);
+    }
   });
 
   it("keeps legacy camelCase management routes as compatible aliases", function () {
