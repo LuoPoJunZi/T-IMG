@@ -6,7 +6,7 @@ T-IMG is an independently maintained file and image hosting project built with C
 
 ## Features
 
-- Uploads files to Telegram and serves stable same-origin `/file/:id` URLs.
+- Uploads files to Telegram, returns same-origin `/i/:short-code.ext` links for new uploads, and keeps existing `/file/:id` URLs compatible.
 - Protects upload pages and `POST /upload` with a backend-verified password, signed HttpOnly session cookie, and KV-backed login throttling.
 - Limits uploads to 20 MiB by default so files remain retrievable through the public Bot API.
 - Stores image metadata in the required `img_url` KV binding and supports gallery management, blocklists, allowlists, and content review.
@@ -60,7 +60,7 @@ npm start
 | `UPLOAD_SESSION_SECRET` | Yes | Secret | Backend-only HMAC session signing key |
 | `UPLOAD_SESSION_MAX_AGE` | No | Text | Session lifetime in seconds; defaults to 7 days |
 | `UPLOAD_AUTH_KV` | Yes | KV namespace binding | Dedicated storage for failed-login throttling |
-| `img_url` | Yes | KV namespace binding | Image metadata, management, and list data |
+| `img_url` | Yes | KV namespace binding | Short-code mappings, image metadata, management, and list data |
 | `BASIC_USER` | Recommended | Text | Management Basic Auth username |
 | `BASIC_PASS` | Recommended | Secret | Management Basic Auth password |
 | `ModerateContentApiKey` | No | Secret | Content review for legacy Telegraph files |
@@ -78,13 +78,14 @@ The site owner chooses the password visitors enter on `/upload-login` and stores
 - `POST /api/upload-auth/login`
 - `POST /api/upload-auth/logout`
 - `GET /api/upload-auth/session`
+- `GET|HEAD /i/:short-code.ext`
 - `GET|HEAD /file/:id`
 - `/api/manage/list`
 - `/api/manage/{block|white|delete|edit-name|toggle-like}/:id`
 
 Legacy static paths are redirected through [`_redirects`](_redirects). Legacy `editName` and `toggleLike` APIs remain as compatibility aliases.
 
-Upload pages and `POST /upload` require an upload session. A valid configured management Basic Auth session remains accepted by `POST /upload` so gallery uploads continue to work. Existing `/file/:id` links remain public.
+Upload pages and `POST /upload` require an upload session. A valid configured management Basic Auth session remains accepted by `POST /upload` so gallery uploads continue to work. New uploads use an automatically generated 12-character random code; custom short-link names are not supported. The code and full Telegram file identifier share the existing `img_url` record, so no additional KV namespace is required and a normal short-link request performs one KV read. Existing `/file/:id` links remain public.
 
 ## GitHub Actions
 

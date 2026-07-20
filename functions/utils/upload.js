@@ -5,6 +5,7 @@ import { getUploadRequestAuthorization, isSameOriginRequest } from "./upload-aut
 const TELEGRAM_MAX_UPLOAD_SIZE = 20 * 1024 * 1024;
 const TELEGRAM_PHOTO_MAX_SIZE = 10 * 1024 * 1024;
 const MAX_NETWORK_RETRIES = 2;
+const SHORT_CODE_BYTE_LENGTH = 9;
 
 const MIME_EXTENSIONS = {
   "image/jpeg": "jpg",
@@ -87,6 +88,14 @@ function getSafeExtension(fileName, mimeType) {
     return candidate;
   }
   return MIME_EXTENSIONS[mimeType] || "bin";
+}
+
+function createShortCode() {
+  const bytes = new Uint8Array(SHORT_CODE_BYTE_LENGTH);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 function getTelegramTarget(uploadFile) {
@@ -213,11 +222,13 @@ export async function onRequestPost(context) {
     );
     const fileId = getFileId(telegramResponse);
 
-    if (!fileId || !/^[A-Za-z0-9_-]+$/.test(fileId)) {
+    if (!fileId || fileId.length > 512 || !/^[A-Za-z0-9_-]+$/.test(fileId)) {
       throw new UploadError(502, "telegram_invalid_response", "Upload service returned an invalid response");
     }
 
-    const storageKey = `${fileId}.${fileExtension}`;
+    const legacyStorageKey = `${fileId}.${fileExtension}`;
+    const storageKey = `${createShortCode()}.${fileExtension}`;
+    let publicPath = `/i/${storageKey}`;
     try {
       await uploadConfig.imageIndex.put(storageKey, "", {
         metadata: {
@@ -227,15 +238,17 @@ export async function onRequestPost(context) {
           liked: false,
           fileName,
           fileSize: uploadFile.size,
+          telegramFileId: fileId,
         },
       });
     } catch {
       // Telegram already accepted the file. Reporting a failure here would encourage
-      // a duplicate upload, so keep the public result and record only a safe warning.
+      // a duplicate upload. The legacy path remains usable without a KV alias.
       console.warn("Upload metadata write failed after Telegram accepted the file");
+      publicPath = `/file/${legacyStorageKey}`;
     }
 
-    return jsonResponse([{ src: `/file/${storageKey}` }], 200);
+    return jsonResponse([{ src: publicPath }], 200);
   } catch (error) {
     const knownError = error instanceof UploadError;
     const status = knownError ? error.status : 500;

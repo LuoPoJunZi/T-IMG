@@ -8,12 +8,13 @@ function basic(user, pass) {
 
 function fileContext({
   id = "1234567890abcdef12345678.png",
+  route = "file",
   method = "GET",
   headers = {},
   env = {},
 } = {}) {
   return {
-    request: new Request(`https://example.com/file/${id}`, { method, headers }),
+    request: new Request(`https://example.com/${route}/${id}`, { method, headers }),
     params: { id },
     env,
   };
@@ -170,5 +171,110 @@ describe("file proxy", function () {
     assert.equal(response.status, 200);
     assert.equal(urls.length, 2);
     assert.equal(urls.some((url) => url.includes("moderatecontent.com")), false);
+  });
+
+  it("resolves a short link with one KV read and no metadata rewrite", async function () {
+    const urls = [];
+    let fileId;
+    let reads = 0;
+    let writes = 0;
+    globalThis.fetch = async (url, options) => {
+      urls.push(String(url));
+      if (urls.length === 1) {
+        fileId = options.body.get("file_id");
+        return new Response(JSON.stringify({ ok: true, result: { file_path: "photos/short.png" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response("short image", { status: 200 });
+    };
+
+    const response = await onRequest(fileContext({
+      route: "i",
+      id: "AbCdEf0123_-.png",
+      env: {
+        TG_Bot_Token: "private-test-token",
+        img_url: {
+          getWithMetadata: async () => {
+            reads += 1;
+            return {
+              value: "",
+              metadata: {
+                telegramFileId: "BQAC_short-link-file-id",
+                ListType: "None",
+                Label: "None",
+                TimeStamp: 1,
+              },
+            };
+          },
+          put: async () => { writes += 1; },
+        },
+      },
+    }));
+
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "short image");
+    assert.equal(fileId, "BQAC_short-link-file-id");
+    assert.equal(reads, 1);
+    assert.equal(writes, 0);
+    assert.equal(urls.length, 2);
+  });
+
+  it("keeps the management /file path compatible with short-code records", async function () {
+    let telegramLookup = false;
+    globalThis.fetch = async (url) => {
+      if (String(url).includes("/getFile")) {
+        telegramLookup = true;
+        return new Response(JSON.stringify({ ok: true, result: { file_path: "documents/file.txt" } }));
+      }
+      return new Response("file", { status: 200 });
+    };
+
+    const response = await onRequest(fileContext({
+      id: "AbCdEf0123_-.txt",
+      env: {
+        TG_Bot_Token: "private-test-token",
+        img_url: {
+          getWithMetadata: async () => ({
+            value: "",
+            metadata: { telegramFileId: "BQAC_short-link-file-id", ListType: "None", Label: "None" },
+          }),
+          put: async () => {},
+        },
+      },
+    }));
+
+    assert.equal(response.status, 200);
+    assert.equal(telegramLookup, true);
+  });
+
+  it("fails safely when a short link is missing or the image index is unavailable", async function () {
+    let fetchCalled = false;
+    globalThis.fetch = async () => {
+      fetchCalled = true;
+      return new Response("unexpected");
+    };
+
+    const missing = await onRequest(fileContext({
+      route: "i",
+      id: "AbCdEf0123_-.png",
+      env: {
+        img_url: {
+          getWithMetadata: async () => ({ value: null, metadata: null }),
+          put: async () => {},
+        },
+      },
+    }));
+    const unavailable = await onRequest(fileContext({
+      route: "i",
+      id: "AbCdEf0123_-.png",
+    }));
+
+    assert.equal(missing.status, 404);
+    assert.equal((await missing.json()).code, "short_link_not_found");
+    assert.equal(unavailable.status, 503);
+    assert.equal((await unavailable.json()).code, "image_index_unavailable");
+    assert.equal(fetchCalled, false);
   });
 });

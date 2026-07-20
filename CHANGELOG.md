@@ -15,6 +15,7 @@
 - 增加 Cloudflare 配置类型对照表，以及上传访问密码、会话密钥、限流 KV 和 Fail closed 的逐步配置教程。
 - 增加本地 Wrangler 真实 HTTP 登录、会话、退出和上传路由冒烟测试。
 - 增加上传失败分类提示；会话过期时自动返回上传登录页。
+- 增加自动生成的 `/i/:short-code.ext` 上传短链，复用现有 `img_url` KV 保存完整 Telegram 文件标识，不新增 KV 命名空间或自定义命名入口。
 
 ### Changed
 
@@ -29,6 +30,7 @@
 - 管理页面改用 `/api/manage/edit-name/:id` 和 `/api/manage/toggle-like/:id`，旧驼峰路径继续兼容。
 - 上传页面及 Pages Clean URLs 等价路径改由根级 Functions 中间件保护；`POST /upload` 同时校验上传会话或有效后台 Basic Auth。
 - `img_url` 明确为生产上传和后台管理必需的 KV Namespace 绑定；已有 `/file/:id` 在绑定异常时仍保持公开访问。
+- 新上传在短码记录写入成功后返回 `/i/` 地址；旧 `/file/:id` 和后台 `/file/短码` 访问保持兼容。公开文件元数据没有变化时不再重复写入 KV。
 
 ### Fixed
 

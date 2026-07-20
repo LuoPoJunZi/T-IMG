@@ -183,10 +183,12 @@ describe("upload endpoint", function () {
     });
 
     assert.equal(response.status, 200);
-    assert.deepEqual(await responseJson(response), [{ src: "/file/BQAC_safe-file-id.txt" }]);
-    assert.equal(stored.key, "BQAC_safe-file-id.txt");
+    const responseBody = await responseJson(response);
+    assert.match(responseBody[0].src, /^\/i\/[A-Za-z0-9_-]{12}\.txt$/);
+    assert.equal(stored.key, responseBody[0].src.slice(3));
     assert.equal(stored.options.metadata.fileName, "unsafename.invalid!");
     assert.equal(stored.options.metadata.fileSize, 5);
+    assert.equal(stored.options.metadata.telegramFileId, "BQAC_safe-file-id");
   });
 
   it("does not report a false failure when the required KV write fails after Telegram succeeds", async function () {

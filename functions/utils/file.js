@@ -35,6 +35,13 @@ function hasFileMetadataBinding(binding) {
     && typeof binding.put === "function";
 }
 
+function isValidTelegramFileId(value) {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= 512
+    && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
 function getFileParts(id) {
   const value = String(id || "");
   if (!value || value.length > 512 || !/^[A-Za-z0-9._-]+$/.test(value)) return null;
@@ -44,6 +51,17 @@ function getFileParts(id) {
     id: value,
     fileId,
     isTelegram: fileId.length > 39,
+  };
+}
+
+function getShortLinkParts(id) {
+  const value = String(id || "");
+  const match = /^([A-Za-z0-9_-]{12})\.([a-z0-9]{1,10})$/.exec(value);
+  if (!match) return null;
+  return {
+    id: value,
+    fileId: null,
+    isTelegram: true,
   };
 }
 
@@ -103,6 +121,7 @@ function defaultMetadata(fileId) {
 function normalizeMetadata(metadata, fileId) {
   const fallback = defaultMetadata(fileId);
   return {
+    ...(metadata || {}),
     ListType: metadata?.ListType || fallback.ListType,
     Label: metadata?.Label || fallback.Label,
     TimeStamp: metadata?.TimeStamp || fallback.TimeStamp,
@@ -146,8 +165,38 @@ export async function onRequest({ request, env, params }) {
   }
 
   const url = new URL(request.url);
-  const file = getFileParts(params.id);
+  const isShortLink = url.pathname.startsWith("/i/");
+  const file = isShortLink ? getShortLinkParts(params.id) : getFileParts(params.id);
   if (!file) return jsonError(400, "invalid_file_id", "Invalid file identifier");
+
+  const hasMetadata = hasFileMetadataBinding(env.img_url);
+  let metadataRecord = null;
+  let metadataReadFailed = false;
+  if (hasMetadata) {
+    try {
+      metadataRecord = await env.img_url.getWithMetadata(file.id);
+    } catch {
+      metadataReadFailed = true;
+      console.warn("File metadata read failed");
+    }
+  }
+
+  if (isShortLink) {
+    if (!hasMetadata || metadataReadFailed) {
+      return jsonError(503, "image_index_unavailable", "File service is not configured");
+    }
+    const telegramFileId = metadataRecord?.metadata?.telegramFileId;
+    if (!isValidTelegramFileId(telegramFileId)) {
+      return jsonError(404, "short_link_not_found", "File not found");
+    }
+    file.fileId = telegramFileId;
+  } else {
+    const storedTelegramFileId = metadataRecord?.metadata?.telegramFileId;
+    if (isValidTelegramFileId(storedTelegramFileId)) {
+      file.fileId = storedTelegramFileId;
+      file.isTelegram = true;
+    }
+  }
 
   let upstreamUrl = `https://telegra.ph${url.pathname}${url.search}`;
   if (file.isTelegram) {
@@ -175,14 +224,13 @@ export async function onRequest({ request, env, params }) {
 
   if (!upstreamResponse.ok) return upstreamResponse;
   if (isAllowedAdminPreview(request, env, url.origin)) return upstreamResponse;
-  if (!hasFileMetadataBinding(env.img_url)) {
+  if (!hasMetadata || metadataReadFailed) {
     console.warn("File metadata binding is unavailable; serving the public file without metadata checks");
     return upstreamResponse;
   }
 
-  const record = await env.img_url.getWithMetadata(file.id);
-  const metadata = normalizeMetadata(record?.metadata, file.id);
-  if (!record?.metadata) await saveMetadata(env, file.id, metadata);
+  const metadata = normalizeMetadata(metadataRecord?.metadata, file.id);
+  let shouldSaveMetadata = !metadataRecord?.metadata;
 
   if (metadata.ListType === "White") return upstreamResponse;
   if (metadata.ListType === "Block" || metadata.Label === "adult") {
@@ -199,13 +247,14 @@ export async function onRequest({ request, env, params }) {
     const label = await moderateTelegraphFile(env, url);
     if (label) {
       metadata.Label = label;
-      await saveMetadata(env, file.id, metadata);
+      shouldSaveMetadata = true;
       if (label === "adult") {
+        await saveMetadata(env, file.id, metadata);
         return Response.redirect(`${url.origin}/image-blocked.html`, 302);
       }
     }
   }
 
-  await saveMetadata(env, file.id, metadata);
+  if (shouldSaveMetadata) await saveMetadata(env, file.id, metadata);
   return upstreamResponse;
 }

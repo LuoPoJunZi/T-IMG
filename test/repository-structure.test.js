@@ -5,6 +5,8 @@ import { onRequest as editName } from "../functions/api/manage/edit-name/[id].js
 import { onRequest as legacyEditName } from "../functions/api/manage/editName/[id].js";
 import { onRequest as toggleLike } from "../functions/api/manage/toggle-like/[id].js";
 import { onRequest as legacyToggleLike } from "../functions/api/manage/toggleLike/[id].js";
+import { onRequest as fileRoute } from "../functions/file/[id].js";
+import { onRequest as shortLinkRoute } from "../functions/i/[id].js";
 
 describe("repository naming conventions", function () {
   it("keeps canonical pages, assets, and localized documentation", function () {
@@ -21,6 +23,8 @@ describe("repository naming conventions", function () {
       "assets/styles/upload-login.css",
       "assets/scripts/upload-login.js",
       "assets/scripts/upload-feedback.js",
+      "functions/i/[id].js",
+      "functions/i/_middleware.js",
       "_routes.json",
     ];
 
@@ -48,6 +52,12 @@ describe("repository naming conventions", function () {
     for (const path of protectedPaths) {
       assert.equal(routes.include.includes(path), true, `${path} must invoke the authentication middleware`);
     }
+  });
+
+  it("routes short links through the shared file proxy", function () {
+    const routes = JSON.parse(readFileSync("_routes.json", "utf8"));
+    assert.equal(routes.include.includes("/i/*"), true);
+    assert.equal(shortLinkRoute, fileRoute);
   });
 
   it("loads safe upload error feedback on every upload page", function () {

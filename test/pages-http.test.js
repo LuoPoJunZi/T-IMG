@@ -23,6 +23,10 @@ describe("Pages HTTP upload flow", { skip: !baseUrl }, function () {
     const loginPageResponse = await fetch(requestUrl("/upload-login"));
     assert.equal(loginPageResponse.status, 200);
 
+    const invalidShortLink = await fetch(requestUrl("/i/not-a-short-link"));
+    assert.equal(invalidShortLink.status, 400);
+    assert.equal((await invalidShortLink.json()).code, "invalid_file_id");
+
     const unauthorizedForm = new FormData();
     unauthorizedForm.append("file", new File(["image"], "image.png", { type: "image/png" }));
     const unauthorizedUpload = await fetch(requestUrl("/upload"), {

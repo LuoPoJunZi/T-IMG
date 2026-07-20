@@ -6,7 +6,7 @@ T-IMG 是基于 Cloudflare Pages Functions、Telegram Bot API 和 Cloudflare KV 
 
 ## 主要能力
 
-- 将文件上传到 Telegram，并通过同域 `/file/:id` 地址访问。
+- 将文件上传到 Telegram，新上传自动返回同域 `/i/:short-code.ext` 短链，并继续兼容已有 `/file/:id` 地址。
 - 使用后端校验密码、签名 HttpOnly 会话 Cookie 和 KV 登录限流保护上传页面及 `POST /upload`。
 - 默认限制单文件 20 MiB，确保可通过公共 Bot API 取回。
 - 使用必需的 `img_url` KV 保存图片元数据，并提供画廊管理、黑白名单和内容审核。
@@ -60,7 +60,7 @@ npm start
 | `UPLOAD_SESSION_SECRET` | 必需 | 密钥 | 仅供后端使用的 HMAC 会话签名密钥 |
 | `UPLOAD_SESSION_MAX_AGE` | 可选 | 文本 | 会话有效期秒数，默认 7 天 |
 | `UPLOAD_AUTH_KV` | 必需 | KV Namespace 绑定 | 专用于登录失败限流的 KV |
-| `img_url` | 必需 | KV Namespace 绑定 | 图片元数据、后台管理和名单数据 |
+| `img_url` | 必需 | KV Namespace 绑定 | 短码映射、图片元数据、后台管理和名单数据 |
 | `BASIC_USER` | 建议配置 | 文本 | 后台 Basic Auth 用户名 |
 | `BASIC_PASS` | 建议配置 | 密钥 | 后台 Basic Auth 密码 |
 | `ModerateContentApiKey` | 可选 | 密钥 | 旧 Telegraph 文件的内容审核 |
@@ -87,13 +87,14 @@ npm start
 - `POST /api/upload-auth/login`
 - `POST /api/upload-auth/logout`
 - `GET /api/upload-auth/session`
+- `GET|HEAD /i/:short-code.ext`
 - `GET|HEAD /file/:id`
 - `/api/manage/list`
 - `/api/manage/{block|white|delete|edit-name|toggle-like}/:id`
 
 旧静态路径通过 [`_redirects`](_redirects) 重定向；旧 `editName` 和 `toggleLike` API 继续作为兼容入口。
 
-上传页面和 `POST /upload` 必须具有上传会话。为保持画廊批量上传兼容，`POST /upload` 也接受已正确配置并验证通过的后台 Basic Auth；已有 `/file/:id` 链接继续公开访问。
+上传页面和 `POST /upload` 必须具有上传会话。为保持画廊批量上传兼容，`POST /upload` 也接受已正确配置并验证通过的后台 Basic Auth。新上传使用系统自动生成的 12 位随机短码，不提供自定义命名；短码和完整 Telegram 文件标识保存在现有 `img_url` 中，不需要新增 KV 命名空间。普通短链访问只读取一次该 KV 记录，已有 `/file/:id` 链接继续公开访问。
 
 ## GitHub Actions
 

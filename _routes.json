@@ -10,6 +10,7 @@
     "/upload-login.html",
     "/upload",
     "/api/*",
+    "/i/*",
     "/file/*"
   ],
   "exclude": []
