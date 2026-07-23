@@ -7,7 +7,7 @@ T-IMG 是基于 Cloudflare Pages Functions、Telegram Bot API 和 Cloudflare KV 
 ## 主要能力
 
 - 将文件上传到 Telegram，新上传自动返回同域 `/i/:short-code.ext` 短链，并继续兼容已有 `/file/:id` 地址。
-- 使用后端校验密码、签名 HttpOnly 会话 Cookie 和 KV 登录限流保护上传页面及 `POST /upload`。
+- 使用后端校验密码和签名 HttpOnly 会话 Cookie 保护上传页面及 `POST /upload`。
 - 默认限制单文件 20 MiB，确保可通过公共 Bot API 取回。
 - 使用必需的 `img_url` KV 保存图片元数据，并提供画廊管理、黑白名单和内容审核。
 - 管理接口可启用 HTTP Basic Auth。
@@ -59,7 +59,6 @@ npm start
 | `UPLOAD_ACCESS_PASSWORD` | 必需 | 密钥 | 访问者在上传登录页输入的密码 |
 | `UPLOAD_SESSION_SECRET` | 必需 | 密钥 | 仅供后端使用的 HMAC 会话签名密钥 |
 | `UPLOAD_SESSION_MAX_AGE` | 可选 | 文本 | 会话有效期秒数，默认 7 天 |
-| `UPLOAD_AUTH_KV` | 必需 | KV Namespace 绑定 | 专用于登录失败限流的 KV |
 | `img_url` | 必需 | KV Namespace 绑定 | 短码映射、图片元数据、后台管理和名单数据 |
 | `BASIC_USER` | 建议配置 | 文本 | 后台 Basic Auth 用户名 |
 | `BASIC_PASS` | 建议配置 | 密钥 | 后台 Basic Auth 密码 |
@@ -72,14 +71,53 @@ npm start
 
 上传页面使用一个由站点所有者自行设置、由访问者在前台输入的密码：
 
-1. 在 Cloudflare Pages 项目的 `Settings > Variables and Secrets` 中新增加密 Secret：`UPLOAD_ACCESS_PASSWORD`，值填写你希望用户输入的强密码。
-2. 再新增加密 Secret：`UPLOAD_SESSION_SECRET`，值使用独立的长随机字符串。它只供后端签名会话，用户不需要知道，也不能与访问密码相同。
+1. 在 Cloudflare Pages 项目的 `Settings > Variables and Secrets` 中新增加密 Secret：`UPLOAD_ACCESS_PASSWORD`，值填写随机生成的强密码。
+2. 再新增加密 Secret：`UPLOAD_SESSION_SECRET`，值使用另一条独立的长随机字符串。它只供后端签名会话，用户不需要知道，也不能与访问密码相同。
 3. 新增普通变量 `UPLOAD_SESSION_MAX_AGE=604800`，表示登录状态保持 7 天。
-4. 创建图片元数据 Workers KV，并以变量名 `img_url` 绑定到 Pages 项目。它是必需绑定，不能添加成普通文本变量。
-5. 再创建一个独立 Workers KV，并以变量名 `UPLOAD_AUTH_KV` 绑定到 Pages 项目，用于错误密码限流；不要与 `img_url` 共用。
-6. 将 Pages Functions 的 Fail open / closed 设置为 `Fail closed`，然后重新部署。
+4. 创建图片元数据 Workers KV，并以变量名 `img_url` 绑定到 Pages 项目。它是唯一必需的 KV 绑定，不能添加成普通文本变量。
+5. 将 Pages Functions 的 Fail open / closed 设置为 `Fail closed`，然后重新部署。
 
-配置完成后，用户打开上传页面会先进入 `/upload-login`；输入与 `UPLOAD_ACCESS_PASSWORD` 相同的密码后才能使用上传界面。密码错误、会话过期或主动退出后都会重新禁止访问。随机密钥生成方法、Cloudflare 控制台逐步操作和验收清单见[部署说明](docs/DEPLOYMENT.md)。
+可在 Windows PowerShell 中运行以下命令生成 32 字符、192 位随机访问密码：
+
+```powershell
+$uploadPasswordBytes = New-Object byte[] 24
+$uploadPasswordGenerator = [Security.Cryptography.RandomNumberGenerator]::Create()
+$uploadPasswordGenerator.GetBytes($uploadPasswordBytes)
+[Convert]::ToBase64String($uploadPasswordBytes)
+$uploadPasswordGenerator.Dispose()
+```
+
+再单独运行以下命令生成 64 字符、384 位会话密钥：
+
+```powershell
+$sessionSecretBytes = New-Object byte[] 48
+$sessionSecretGenerator = [Security.Cryptography.RandomNumberGenerator]::Create()
+$sessionSecretGenerator.GetBytes($sessionSecretBytes)
+[Convert]::ToBase64String($sessionSecretBytes)
+$sessionSecretGenerator.Dispose()
+```
+
+把两次输出分别保存为 Cloudflare 的“密钥/Secret”，并同时保存在密码管理器中；禁止把值提交到 Git、写进文档、发送到聊天或截图公开。代码最低允许 12 字符密码，但由于当前方案不保存错误次数，生产环境建议使用至少 24 个随机字符。
+
+配置完成后，用户打开上传页面会先进入 `/upload-login`；输入与 `UPLOAD_ACCESS_PASSWORD` 相同的密码后才能使用上传界面。每次错误密码都会由后端直接拒绝并返回 401，但不会写入 KV 或保存错误次数；会话过期或主动退出后会重新禁止访问。不再需要创建或绑定 `UPLOAD_AUTH_KV`。Cloudflare 控制台逐步操作和验收清单见[部署说明](docs/DEPLOYMENT.md)。
+
+### 自定义域名与 Cloudflare WAF 加固
+
+面向公网使用时，建议先在 `Workers & Pages > T-IMG > Custom domains` 绑定由同一 Cloudflare 账户托管的域名，例如 `img.example.com`，并保持 Pages 创建的 DNS 记录为已代理状态。域名级 WAF 不会保护原始 `*.pages.dev` 地址；如果继续允许用户直接访问该地址，就可以绕过自定义域名上的 WAF。因此还应使用 Cloudflare Bulk Redirect，把生产 `*.pages.dev` 地址及路径、查询参数重定向到自定义域名。
+
+在当前新版控制台中，进入域名区域后点击左侧 `安全性（Security） > 安全规则（Security rules） > 创建规则 > 自定义规则（Custom rules）`。旧版控制台中的对应路径是 `Security > WAF > Custom rules`。新建规则并把示例主机名替换成自己的域名：
+
+```text
+(http.host eq "img.example.com" and (
+  http.request.uri.path in {"/upload-login" "/upload-login/" "/upload-login.html"}
+  or (http.request.uri.path in {"/api/upload-auth/login" "/api/upload-auth/login/"}
+      and http.request.method eq "POST")
+))
+```
+
+动作选择 **Managed Challenge（托管质询/人机验证）**，**状态选择“活动”**，再点击“部署”。“已禁用”只会保存规则，不会主动评估传入流量。该规则只验证上传登录入口和直接密码提交，不影响 `/i/*`、`/file/*` 公开图片链接。Cloudflare 验证成功后写入的 `cf_clearance` 与 T-IMG 的上传会话 Cookie 是两套独立机制；通过人机验证仍必须输入正确的后端访问密码。Challenge Passage 建议先使用默认 30 分钟。
+
+还可以按套餐能力为 `/api/upload-auth/login` 增加边缘 Rate Limiting，并在观察 Security Events 后谨慎启用 Bot Fight Mode。不要对全站直接设置 Managed Challenge，否则可能破坏博客图片引用、公开文件访问、自动化客户端，或在验证状态过期后中断上传。完整的域名绑定、防旁路、WAF、验收和回退步骤见[部署说明](docs/DEPLOYMENT.md)。
 
 ## 公开路由
 

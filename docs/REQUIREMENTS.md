@@ -112,13 +112,13 @@
 ### DEV-009
 
 - 需求名称：上传页面后端访问保护
-- 需求描述：访问主上传页或 Markdown 上传页前必须通过后端密码验证；使用 HMAC 签名的安全 Cookie 保持会话；页面和 `POST /upload` 双重校验；提供退出能力并限制连续失败尝试。
+- 需求描述：访问主上传页或 Markdown 上传页前必须通过后端密码验证；使用 HMAC 签名的安全 Cookie 保持会话；页面和 `POST /upload` 双重校验；提供退出能力。最初的连续失败限制后由 DEV-013 简化为不记录错误次数。
 - 用户价值：防止未授权访客看到上传界面或绕过页面直接消耗 Telegram、Cloudflare 和项目配额。
 - 涉及页面：`index.html`、`markdown-upload.html`、新增 `upload-login.html`，同时保护 Pages Clean URLs 的 `/index` 和 `/markdown-upload` 等价路径。
 - 涉及接口：新增 `POST /api/upload-auth/login`、`POST /api/upload-auth/logout`、`GET /api/upload-auth/session`；`POST /upload` 成功响应保持不变，未认证返回 401，跨站请求返回 403，配置缺失返回 503。
-- 配置要求：`UPLOAD_ACCESS_PASSWORD` 至少 12 字符、`UPLOAD_SESSION_SECRET` 至少 32 字符并保存为 Cloudflare Secret；`UPLOAD_SESSION_MAX_AGE` 默认 604800 秒；独立绑定 `UPLOAD_AUTH_KV` 保存匿名化登录失败计数；Pages Functions 配额设置为 Fail closed。
+- 配置要求：`UPLOAD_ACCESS_PASSWORD` 代码最低 12 字符、生产建议至少 24 个随机字符；`UPLOAD_SESSION_SECRET` 至少 32 字符，二者保存为不同的 Cloudflare Secret；`UPLOAD_SESSION_MAX_AGE` 默认 604800 秒；Pages Functions 配额设置为 Fail closed；不需要认证 KV。
 - 兼容要求：`/file/:id` 继续公开；后台管理认证与路由不改变；有效后台 Basic Auth 可继续调用 `/upload`，保持画廊批量上传。
-- 验收标准：未认证页面跳转登录、未认证接口返回 401、正确/错误密码、刷新保持、篡改/过期会话、退出、第五次失败限流、跨站请求、Clean URLs、公开文件和后台路由均有自动化或真实 HTTP 验证；仓库无真实密码。
+- 验收标准：未认证页面跳转登录、未认证接口返回 401、正确/错误密码、刷新保持、篡改/过期会话、退出、重复错误仍统一拒绝、跨站请求、Clean URLs、公开文件和后台路由均有自动化或真实 HTTP 验证；仓库无真实密码。
 - 优先级：高
 - 状态：已完成
 
@@ -129,7 +129,7 @@
 - 用户价值：避免产生没有索引记录的新上传，阻止把文本变量误当 KV，缩短生产配置故障定位时间，并防止单元测试全绿却遗漏 Pages 路由问题。
 - 涉及页面：`index.html`、`markdown-upload.html` 及同源上传反馈脚本。
 - 涉及接口：`POST /upload` 新增 `image_index_not_configured` 503 错误码；成功响应、公开 `/file/:id` 和后台路由保持兼容。
-- 配置要求：Production 环境必须分别配置 `TG_Bot_Token`、`TG_Chat_ID`、`img_url`、上传认证 Secret 和 `UPLOAD_AUTH_KV`；`img_url` 必须是 KV Namespace 绑定，不能是文本或 Secret。
+- 配置要求：Production 环境必须分别配置 `TG_Bot_Token`、`TG_Chat_ID`、`img_url` 和两个上传认证 Secret；`img_url` 必须是 KV Namespace 绑定，不能是文本或 Secret。
 - 验收标准：缺失、文本或不完整 `img_url` 在 Telegram 调用前被拒绝；日志不含配置值；已有公开文件在 KV 绑定异常时仍可访问；前端显示安全且可操作的错误；`npm test` 与真实 Pages HTTP 冒烟测试覆盖修复行为。
 - 优先级：高
 - 状态：已完成
@@ -142,9 +142,46 @@
 - 涉及页面：原上传、拖拽、进度和结果展示页面不改变交互；后台现有 `/file/:id` 预览保持兼容。
 - 涉及接口：`POST /upload` 成功响应仍为包含 `src` 的数组，新上传在 KV 写入成功时返回 `/i/:short-code.ext`；新增公开 `GET|HEAD /i/:short-code.ext`；旧 `/file/:id` 保持公开兼容。
 - 数据要求：短码为后端使用 Web Crypto 自动生成的 12 位 URL 安全随机值；KV 键为短码和安全扩展名，元数据新增 `telegramFileId`；不保存自定义别名。
-- 配额要求：生成短码不执行碰撞查询；普通 `/i/` 请求只读取一次 `img_url` 记录并且不写回未变化元数据；`UPLOAD_AUTH_KV` 继续独立保存认证限流计数。
+- 配额要求：生成短码不执行碰撞查询；普通 `/i/` 请求只读取一次 `img_url` 记录并且不写回未变化元数据；上传认证不读写错误次数 KV。
 - 故障处理：短码记录不存在时返回 404；短链依赖的 KV 不可用时返回不泄密的 503；Telegram 已成功但 KV 写入失败时返回可直接解析的旧式 `/file/{file_id}.{extension}` 地址。
 - 验收标准：短码格式、完整 Telegram 标识保存、单次 KV 读取、零无效元数据写回、缺失映射、KV 不可用、旧链接和后台预览兼容均有回归测试；不调用真实 Telegram 或生产 KV。
+- 优先级：高
+- 状态：已完成
+
+### DEV-012
+
+- 需求名称：个人博客发布文章
+- 需求描述：基于当前代码和维护文档，整理一篇可直接用于个人博客的中文 Markdown 长文，完整介绍项目背景、能力、架构、认证、上传、短链、Cloudflare 配置、从零部署、测试、排错、配额、回退和限制；部署教程需要覆盖 GitHub、Telegram Bot/Chat ID、唯一必需的 `img_url` KV、Pages 构建参数、Production 变量与 Secret、强密码生成、Fail closed、重新部署和首次验收。
+- 用户价值：无需重新拼接仓库说明即可对外介绍 T-IMG，并为读者提供从理解原理到完成部署的连贯资料。
+- 涉及页面与接口：不修改运行页面、Functions 或公开 API。
+- 安全要求：只使用占位凭据和示例短码，不包含真实 Token、Chat ID、密码、Cookie 或 Authorization Header；项目来源致谢仍只维护在中英文 README。
+- 验收标准：文档使用标准 Markdown，包含文章元数据、架构图、配置表、可由首次部署者逐项执行的详细部署步骤、强密码生成、验收清单和错误排查；明确可自定义的 KV 资源名与必须严格匹配的绑定名，区分 Text、Secret、KV binding 及 Production、Preview；事实与当前 Unreleased 版本及现有文档一致；相对仓库之外仍可阅读主要内容。
+- 优先级：中
+- 状态：已完成
+
+### DEV-013
+
+- 需求名称：简化上传认证存储并移除错误次数记录
+- 需求描述：取消 `UPLOAD_AUTH_KV`、登录失败计数和递增等待时间；没有正确密码时始终由后端拒绝，不创建会话；正确密码、签名 Cookie、上传页面和接口双重校验、退出及原上传能力保持不变。
+- 用户价值：减少一个 KV Namespace、认证读写和部署步骤，符合个人站点“强密码即可上传”的简化使用方式。
+- 涉及页面：登录页错误提示移除 429 分支；原上传页面、拖拽、进度和结果展示不变。
+- 涉及接口：`POST /api/upload-auth/login` 错误密码统一返回 401 `invalid_credentials`；不再返回登录限流相关 429 或因认证 KV 缺失导致的 503。其他认证、上传和公开文件路由保持兼容。
+- 配置要求：不再绑定 `UPLOAD_AUTH_KV`；`UPLOAD_ACCESS_PASSWORD` 与 `UPLOAD_SESSION_SECRET` 必须分别保存为 Cloudflare Secret；生产访问密码建议由密码学安全随机源生成至少 24 个随机字符；唯一必需 KV 仍为 `img_url`。
+- 安全要求：密码只在后端校验，日志不记录输入值；Cookie 属性、同源检查、请求大小和类型限制及 Fail closed 均保留。错误尝试仍会消耗 Pages Functions 请求，高风险部署可在自定义域名叠加 Cloudflare 边缘防护。
+- 验收标准：无 `UPLOAD_AUTH_KV` 时正确登录、会话和退出正常；连续错误密码始终返回 401 且没有 Cookie；未认证直接上传被拒绝；完整测试通过；README、博客、部署、配置示例和维护文档一致并包含强密码生成教程。
+- 优先级：高
+- 状态：已完成
+
+### DEV-014
+
+- 需求名称：补充自定义域名与 Cloudflare WAF 人机验证教程
+- 需求描述：在中英文 README、部署指南和博客中增加自定义域名绑定、DNS 代理、`*.pages.dev` 防旁路、WAF Managed Challenge、Challenge Passage、可选 Rate Limiting/Bot Fight Mode、验收与回退说明。
+- 用户价值：无需重新引入认证 KV，即可在 Cloudflare 边缘减少自动化密码提交和无效 Functions 请求，同时保持公开图片链接可匿名引用。
+- 涉及页面与接口：不修改项目运行代码；推荐 WAF 匹配 `/upload-login`、`/upload-login/`、`/upload-login.html` 和 `POST /api/upload-auth/login[/]`，不匹配 `/i/*`、`/file/*`、静态资源、会话 API 或默认 `POST /upload`。
+- 配置要求：自定义域名必须先在 Pages 项目中激活并由 Cloudflare 区域代理；生产 `*.pages.dev` 通过 Bulk Redirect 跳转自定义域名；WAF 动作为 Managed Challenge；Challenge Passage 建议先使用 30 分钟。
+- 安全要求：WAF 不替代 `UPLOAD_ACCESS_PASSWORD`、签名 Cookie、上传接口二次校验、Fail closed 或后台 Basic Auth；文档不得要求公开凭据、Cookie 或 Token。
+- 兼容要求：公开 `/i/*`、`/file/*`、拖拽上传、进度、后台和旧链接行为不变；启用 Bot Fight Mode、全站质询或管理 API 质询时必须明确误伤和自动化客户端风险。
+- 验收标准：教程提供可复制的主机名与路径表达式、控制台路径、`pages.dev` 防旁路、Cookie 分层、Security Events 排错、验收和回退步骤；事实与 Cloudflare 当前官方文档核对；仓库代码、依赖和云端资源不变。
 - 优先级：高
 - 状态：已完成
 
@@ -158,7 +195,7 @@
 
 ## 兼容性要求
 
-- 保留现有静态页面路径、Functions 路由、HTTP 方法和成功响应结构；认证失败可返回新增的 401、403、429 或 503。
+- 保留现有静态页面路径、Functions 路由、HTTP 方法和成功响应结构；认证失败可返回 401、403 或配置缺失时的 503。
 - 保留 Telegram 上传、同域 `/file/` 公开访问、必需的 `img_url` KV 索引与管理和 Cloudflare Pages 部署方式；新增 `/i/` 不替换或迁移旧链接。
 - 不把项目迁移到新前端框架，不更换存储或现有后台认证架构。
 
@@ -174,10 +211,13 @@
 - DEV-009 不重设计原有上传、拖拽、进度或结果展示交互，只新增认证入口和退出按钮。
 - DEV-009 不把已上传文件改为私有，不修改 `/file/:id` 的公开访问语义。
 - DEV-011 不提供用户自定义短码、旧记录批量迁移或新的 KV 命名空间。
+- DEV-012 不修改业务代码、云端配置或生产环境。
+- DEV-013 不提供应用内错误次数记录、递增等待或登录限流。
+- DEV-014 不把嵌入式 Turnstile 控件加入页面，不替用户创建域名、WAF、Rate Limiting、Access 或其他生产资源。
 - 不更换 Telegram 与图片元数据 KV 存储架构，不替换现有后台 Basic Auth。
 - 本轮不创建或修改生产 Cloudflare 资源，不部署生产环境；生产 Secret 和 KV 绑定由项目所有者配置。
 
 ## 待确认事项
 
 - 原总任务说明中的其他示例功能仍不进入开发清单；只实施项目所有者单独确认的正式需求。
-- 生产域名、Cloudflare Pages 项目、`img_url`、`UPLOAD_AUTH_KV`、真实 Telegram/KV/内容审核联调仍待项目所有者配置和隔离验证。
+- 生产域名、Cloudflare Pages 项目、WAF/重定向、`img_url`、真实 Telegram/KV/内容审核联调仍待项目所有者配置和隔离验证。

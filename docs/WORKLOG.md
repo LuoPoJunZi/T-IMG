@@ -186,3 +186,86 @@ DEV-010 已完成但尚未提交、推送或部署。生产环境仍需由项目
 ### 当前状态
 
 DEV-011 已完成本地实现，尚未提交、推送或部署。当前稳定回退标签仍为 `stable-2026-07-20`（提交 `9c74642`）。
+
+## 2026-07-21：个人博客发布文章
+
+### 已完成
+
+- 新增 `docs/T_IMG_BLOG_ARTICLE.md`，以提交 `dd84d7e` 为内容基线，提供可直接发布的中文 Markdown 长文。
+- 文章包含项目背景、能力、Mermaid 架构图、目录结构、后端上传认证、安全 Cookie、强密码策略、上传链路、自动短链、兼容策略、Cloudflare 配置表、部署教程、本地测试、验收清单、错误排查、免费额度、双重回退和已知限制。
+- 将原简要部署说明扩展为从零教程：准备独立 GitHub 仓库、创建专用 Telegram Bot 和频道、通过官方 Bot API 获取 Chat ID、创建并绑定唯一必需的 `img_url` KV、配置 Pages 构建参数、逐项选择 Production Text/Secret、生成强密码和会话密钥、启用 Fail closed、触发新部署、核对部署日志及完成首次登录、上传和后台验收。
+- 增加生产/预览环境差异、配置变更生效条件、无痕窗口与未登录接口验证、自定义域名 Cookie 行为以及最终配置核对表。
+- 将“配置未完成”排错从单行提示扩展为浏览器 Network、响应代码、Production 部署、Functions 日志和静态资源 503 的顺序化诊断流程。
+- 使用公开项目地址、官方文档链接和占位配置；未写入生产密码、Telegram Token、Chat ID、Cookie 或 Authorization Header。
+- 按协作规则未在博客维护文档中重复建立项目来源仓库关联，来源致谢继续只由中英文 README 维护。
+
+### 验证
+
+- 文章中的路由、变量、KV 绑定、短码长度、测试数量和稳定标签已与当前代码及项目文档核对。
+- Pages Git 集成、KV 控制台绑定和 Fail closed 步骤已与 Cloudflare 官方文档核对；BotFather、`getUpdates` 和 Chat ID 形式已与 Telegram 官方文档核对。
+- 本任务只新增和同步 Markdown 文档，不修改运行代码、依赖、环境变量或 Cloudflare 资源，因此不重复运行 Functions 测试。
+
+### 当前状态
+
+DEV-012 已完成本地文档整理，尚未提交、推送或部署。
+
+## 2026-07-23：移除上传错误次数记录与认证 KV
+
+### 目标与决策
+
+- 按项目所有者确认，上传认证恢复为最简后端强密码方案：没有正确密码就不能进入上传页或调用上传接口，不保存错误次数，也不需要后台查看失败记录。
+- 保留 HMAC-SHA256 签名会话、`__Host-` HttpOnly/Secure/SameSite Cookie、页面和 `POST /upload` 双重校验、同源检查、退出和 Fail closed。
+- 唯一必需 KV 继续是 `img_url`；它保存短链、Telegram 文件标识和管理元数据，不能随旧认证 KV 一起删除。
+
+### 已完成
+
+- 从上传认证工具和登录 API 删除 `UPLOAD_AUTH_KV` 检查、匿名化键、失败计数、清理逻辑以及 429/503 限流分支；错误密码统一返回 401 `invalid_credentials`。
+- 登录页脚本移除 429 专用提示；原上传、拖拽、进度、结果展示、公开文件和后台管理逻辑未修改。
+- 本地 Wrangler 启动命令只绑定 `img_url`，不再创建或读取认证 KV。
+- 回归测试改为验证无认证 KV 时正确登录、会话和退出正常，以及连续错误密码始终返回 401 且不设置 Cookie。
+- 中英文 README、`.env.example`、部署指南、项目概览、需求、计划、决策、变更记录和博客统一改成“两个 Secret + 一个必需 `img_url` KV”。
+- README、部署指南和博客增加 Windows PowerShell 密码学安全随机生成命令：访问密码使用 24 字节随机数据并输出 32 字符 Base64，会话密钥独立使用 48 字节随机数据并输出 64 字符 Base64。生产访问密码建议至少 24 个随机字符。
+- 部署迁移顺序明确为：先部署新代码并完成登录与上传验收，再删除 Pages 的 `UPLOAD_AUTH_KV` 绑定；确认无其他项目使用后才删除旧 Namespace，禁止删除 `img_url`。
+
+### 验证
+
+- Node.js `v24.14.0` 直接执行相关认证测试：14 项通过、0 失败。
+- 受限沙箱内标准 `npm test` 因 Node 测试运行器无法创建子进程而出现 `spawn EPERM`；在允许子进程的环境中重新执行标准 `npm test`：60 项通过、0 失败；另以 Node.js `v24.14.0` 的无测试隔离模式复核同一完整套件，同样为 60 项通过、0 失败。
+- 使用 Wrangler `4.112.0`、Node.js `v24.14.0` 和只绑定 `img_url` 的本地 Pages 环境完成真实 HTTP 回归：62 项通过、0 失败；确认未认证页面跳转、未认证上传 401、正确密码签发会话、认证后页面可访问、缺少本地 Telegram 测试配置时安全返回 503，以及退出后会话失效。
+- `git diff --check` 通过；运行代码和测试中已无 `UPLOAD_AUTH_KV`、登录限流函数或 `login_rate_limit` 错误码引用。
+- 测试未调用真实 Telegram、Cloudflare 生产 KV 或生产 Pages 项目，未生成或写入真实密码。
+
+### 当前状态
+
+DEV-013 已完成本地实现与文档同步，尚未提交、推送或部署。Cloudflare 生产环境仍由项目所有者按迁移顺序调整。
+
+## 2026-07-23：自定义域名与 WAF 人机验证教程
+
+### 目标与边界
+
+- 在不恢复认证 KV、不修改运行代码的前提下，为公网部署补充 Cloudflare 边缘人机验证和自动化流量防护教程。
+- 保持 `/i/*`、`/file/*` 公开访问；WAF 不能替代后端上传密码、签名会话、上传接口二次校验、Fail closed 或后台认证。
+- 本任务只修改仓库文档，不创建域名、DNS、WAF、Rate Limiting、Access、Turnstile 或其他 Cloudflare 生产资源。
+
+### 已完成
+
+- 中英文 README 增加自定义域名、已代理 DNS、WAF Managed Challenge、Challenge Passage、`*.pages.dev` 防旁路和可选边缘加固的快速说明。
+- 部署指南增加完整七步教程：域名区域激活、Pages Custom domains、Bulk Redirect、窄范围 WAF 表达式、两类 Cookie 分层、可选 Rate Limiting/Managed Rules/Bot Fight Mode、验收与回退。
+- 推荐规则只匹配 `/upload-login`、`/upload-login/`、`/upload-login.html` 和 `POST /api/upload-auth/login[/]`；明确不质询 `/i/*`、`/file/*`、静态资源、会话 API 与默认 `POST /upload`，避免 Pages 等价路径绕过以及公开图片和 XHR 上传收到 Challenge Page。
+- 博客补充同等可独立阅读的操作步骤、最终配置表、验收清单、故障排查、免费额度和已知限制，并增加 Cloudflare 官方参考链接。
+- 明确域名级 WAF 不覆盖 Pages 默认 `*.pages.dev`；生产默认域名必须使用 Bulk Redirect 保留路径和查询参数跳向自定义域名，Preview 需要重定向或 Access 单独收口。
+- 区分 Cloudflare `cf_clearance` 与 T-IMG `__Host-t_img_upload_session`；Challenge Passage 建议先保持 30 分钟，上传会话继续默认 7 天。
+- 同步项目概览、需求 DEV-014、计划、ADR-015 和变更记录。
+- 根据 Cloudflare 2026 年新版安全控制台调整导航说明：新版入口为 `安全性 > 安全规则 > 创建规则 > 自定义规则`，并保留旧版 `Security > WAF > Custom rules` 作为兼容提示；托管规则集入口同步改为新版 `安全性 > 设置`。
+- 根据实际规则创建页面补充状态选择：生产规则必须选“活动（Active）”后部署；“已禁用（Disabled）”仅保存配置，不执行托管质询。
+
+### 核对
+
+- 自定义域名添加顺序、Pages 关联要求和默认域名重定向已与 Cloudflare Pages 官方文档核对。
+- WAF Custom Rules、Managed Challenge、Free 计划可用性、Challenge Passage、Rate Limiting、Bot Fight Mode 阶段与 Security Events 排错已与 Cloudflare 官方文档核对。
+- 教程只使用 `img.example.com`、`<PROJECT>.pages.dev` 等占位主机名，不包含真实域名、密码、Token、Cookie、API Key 或账户标识。
+- 本轮不修改 Functions、静态运行页面、测试或依赖，不需要真实 Cloudflare 请求；Node.js `v24.14.0` 无测试隔离模式完整回归 60 项通过、0 失败，`git diff --check` 通过。
+
+### 当前状态
+
+DEV-014 已完成本地文档更新，尚未提交、推送或修改 Cloudflare 生产环境。

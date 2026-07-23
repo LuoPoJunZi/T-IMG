@@ -1,11 +1,8 @@
 import {
-  clearUploadLoginFailures,
   createUploadSessionCookie,
   createUploadSessionToken,
   getUploadAuthConfig,
-  inspectUploadLoginRateLimit,
   isSameOriginRequest,
-  recordUploadLoginFailure,
   sanitizeUploadReturnPath,
   verifyUploadPassword,
 } from "../../utils/upload-auth.js";
@@ -104,39 +101,11 @@ export async function onRequestPost({ request, env }) {
     return jsonResponse({ error: "Invalid login request", code: "invalid_login_request" }, 400);
   }
 
-  const rateLimit = await inspectUploadLoginRateLimit(request, env, config);
-  if (rateLimit.state === "unavailable") {
-    return loginError(input, {
-      error: "Login is temporarily unavailable",
-      code: "login_rate_limit_unavailable",
-    }, 503);
-  }
-  if (rateLimit.state === "blocked") {
-    return loginError(input, {
-      error: "Too many login attempts. Try again later",
-      code: "login_rate_limited",
-    }, 429, { "Retry-After": String(rateLimit.retryAfter) });
-  }
-
   const passwordIsValid = await verifyUploadPassword(input.password, config);
   if (!passwordIsValid) {
-    const failure = await recordUploadLoginFailure(rateLimit, env);
-    if (failure.state === "unavailable") {
-      return loginError(input, {
-        error: "Login is temporarily unavailable",
-        code: "login_rate_limit_unavailable",
-      }, 503);
-    }
-    if (failure.state === "blocked") {
-      return loginError(input, {
-        error: "Too many login attempts. Try again later",
-        code: "login_rate_limited",
-      }, 429, { "Retry-After": String(failure.retryAfter) });
-    }
     return loginError(input, { error: "Invalid credentials", code: "invalid_credentials" }, 401);
   }
 
-  await clearUploadLoginFailures(rateLimit, env);
   const token = await createUploadSessionToken(config);
   const cookie = createUploadSessionCookie(token, config.sessionMaxAge);
   if (!input.wantsJson) return redirectResponse(input.returnTo, cookie);

@@ -47,9 +47,7 @@
         window.location.assign(redirectTo);
         return;
       }
-      if (response.status === 429) {
-        message.textContent = "尝试次数过多，请稍后再试。";
-      } else if (response.status === 401) {
+      if (response.status === 401) {
         message.textContent = "访问密码不正确。";
       } else if (response.status === 503) {
         message.textContent = "验证服务暂时不可用，请联系站点所有者。";

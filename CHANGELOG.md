@@ -11,11 +11,13 @@
 - 增加上传、文件代理、管理认证和管理操作回归测试。
 - 增加可选的 `MAX_UPLOAD_SIZE_BYTES` 上传限制配置。
 - 增加仓库文件命名规范、静态路径兼容重定向及规范管理 API 路由。
-- 增加上传访问登录页、后端密码校验、签名 Cookie 会话、退出接口和 KV 登录限流。
-- 增加 Cloudflare 配置类型对照表，以及上传访问密码、会话密钥、限流 KV 和 Fail closed 的逐步配置教程。
+- 增加上传访问登录页、后端密码校验、签名 Cookie 会话和退出接口。
+- 增加 Cloudflare 配置类型对照表，以及上传访问密码、会话密钥、强密码生成、唯一必需 `img_url` KV 和 Fail closed 的逐步配置教程。
 - 增加本地 Wrangler 真实 HTTP 登录、会话、退出和上传路由冒烟测试。
 - 增加上传失败分类提示；会话过期时自动返回上传登录页。
 - 增加自动生成的 `/i/:short-code.ext` 上传短链，复用现有 `img_url` KV 保存完整 Telegram 文件标识，不新增 KV 命名空间或自定义命名入口。
+- 增加可直接用于个人博客发布的中文项目长文，并将部署教程细化为 GitHub、Telegram Bot/Chat ID、单一必需 `img_url` KV、Pages 构建、Production Secret、强密码生成、Fail closed、重新部署和首次验收的从零流程。
+- 增加自定义域名、DNS 代理、`*.pages.dev` 防旁路、WAF Managed Challenge、Challenge Passage、可选边缘限流、Bot Fight Mode、验收和回退教程。
 
 ### Changed
 
@@ -31,6 +33,7 @@
 - 上传页面及 Pages Clean URLs 等价路径改由根级 Functions 中间件保护；`POST /upload` 同时校验上传会话或有效后台 Basic Auth。
 - `img_url` 明确为生产上传和后台管理必需的 KV Namespace 绑定；已有 `/file/:id` 在绑定异常时仍保持公开访问。
 - 新上传在短码记录写入成功后返回 `/i/` 地址；旧 `/file/:id` 和后台 `/file/短码` 访问保持兼容。公开文件元数据没有变化时不再重复写入 KV。
+- 上传认证取消错误次数记录、429 登录限流和 `UPLOAD_AUTH_KV` 依赖；错误密码统一由后端返回 401，安全会话、接口二次校验和退出行为保持不变。
 
 ### Fixed
 
@@ -54,4 +57,5 @@
 - 增加 `.gitattributes`、`.editorconfig`、贡献指南、安全策略和 Pull Request 模板。
 - Telegram 文件不会把包含 Bot Token 的下载地址发送给第三方内容审核服务。
 - 上传会话使用 HMAC-SHA256 和 `__Host-` HttpOnly/Secure/SameSite Cookie，不在前端或 localStorage 保存凭据；登录页启用严格 CSP，认证与上传接口拒绝浏览器跨站请求。
-- 连续错误密码使用独立 `UPLOAD_AUTH_KV` 做 5 次/10 分钟基础限流，认证配置缺失时失败关闭。
+- 上传认证不保存错误密码或失败次数，不依赖额外 KV；生产访问密码必须使用高熵随机值，认证配置缺失时继续失败关闭。
+- 推荐在自定义域名上仅对上传登录页和登录提交执行 Managed Challenge；公开图片和上传接口不做默认全站质询，生产 `*.pages.dev` 应重定向到自定义域名以防绕过。

@@ -8,8 +8,6 @@ const MIN_SESSION_MAX_AGE = 5 * 60;
 const MAX_SESSION_MAX_AGE = 30 * 24 * 60 * 60;
 const MIN_PASSWORD_LENGTH = 12;
 const MIN_SESSION_SECRET_LENGTH = 32;
-const RATE_LIMIT_MAX_FAILURES = 5;
-const RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
 const MAX_SESSION_TOKEN_LENGTH = 512;
 const textEncoder = new TextEncoder();
 
@@ -216,70 +214,4 @@ export async function getUploadRequestAuthorization(request, env) {
   }
 
   return { state: "unauthorized" };
-}
-
-async function getRateLimitKey(request, config) {
-  const clientAddress = request.headers.get("CF-Connecting-IP") || "unknown-client";
-  const key = await importHmacKey(config.sessionSecret);
-  const digest = await hmac(key, `upload-login-rate\0${clientAddress}`);
-  return `upload-auth-rate:${base64UrlEncode(digest)}`;
-}
-
-function hasRateLimitBinding(env) {
-  return env.UPLOAD_AUTH_KV
-    && typeof env.UPLOAD_AUTH_KV.get === "function"
-    && typeof env.UPLOAD_AUTH_KV.put === "function"
-    && typeof env.UPLOAD_AUTH_KV.delete === "function";
-}
-
-export async function inspectUploadLoginRateLimit(request, env, config, currentTime = nowInSeconds()) {
-  if (!hasRateLimitBinding(env)) return { state: "unavailable" };
-
-  const key = await getRateLimitKey(request, config);
-  let record;
-  try {
-    record = await env.UPLOAD_AUTH_KV.get(key, "json");
-  } catch {
-    return { state: "unavailable" };
-  }
-
-  const count = Number.isSafeInteger(record?.count) && record.count > 0 ? record.count : 0;
-  const resetAt = Number.isSafeInteger(record?.resetAt) ? record.resetAt : 0;
-  if (resetAt <= currentTime) {
-    return { state: "allowed", key, count: 0, resetAt: currentTime + RATE_LIMIT_WINDOW_SECONDS };
-  }
-  if (count >= RATE_LIMIT_MAX_FAILURES) {
-    return { state: "blocked", key, retryAfter: Math.max(1, resetAt - currentTime) };
-  }
-  return { state: "allowed", key, count, resetAt };
-}
-
-export async function recordUploadLoginFailure(rateLimit, env, currentTime = nowInSeconds()) {
-  if (rateLimit?.state !== "allowed") return { state: "unavailable" };
-  const count = rateLimit.count + 1;
-  const resetAt = Math.max(rateLimit.resetAt, currentTime + RATE_LIMIT_WINDOW_SECONDS);
-
-  try {
-    await env.UPLOAD_AUTH_KV.put(
-      rateLimit.key,
-      JSON.stringify({ count, resetAt }),
-      { expirationTtl: Math.max(60, resetAt - currentTime) },
-    );
-  } catch {
-    return { state: "unavailable" };
-  }
-
-  if (count >= RATE_LIMIT_MAX_FAILURES) {
-    return { state: "blocked", retryAfter: Math.max(1, resetAt - currentTime) };
-  }
-  return { state: "recorded" };
-}
-
-export async function clearUploadLoginFailures(rateLimit, env) {
-  if (!rateLimit?.key || !hasRateLimitBinding(env)) return;
-  try {
-    await env.UPLOAD_AUTH_KV.delete(rateLimit.key);
-  } catch {
-    // A stale failure counter may delay a later login, but must not expose credentials.
-  }
 }

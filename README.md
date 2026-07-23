@@ -7,7 +7,7 @@ T-IMG is an independently maintained file and image hosting project built with C
 ## Features
 
 - Uploads files to Telegram, returns same-origin `/i/:short-code.ext` links for new uploads, and keeps existing `/file/:id` URLs compatible.
-- Protects upload pages and `POST /upload` with a backend-verified password, signed HttpOnly session cookie, and KV-backed login throttling.
+- Protects upload pages and `POST /upload` with a backend-verified password and a signed HttpOnly session cookie.
 - Limits uploads to 20 MiB by default so files remain retrievable through the public Bot API.
 - Stores image metadata in the required `img_url` KV binding and supports gallery management, blocklists, allowlists, and content review.
 - Provides optional HTTP Basic authentication for management routes.
@@ -59,7 +59,6 @@ npm start
 | `UPLOAD_ACCESS_PASSWORD` | Yes | Secret | Password visitors enter on the upload login page |
 | `UPLOAD_SESSION_SECRET` | Yes | Secret | Backend-only HMAC session signing key |
 | `UPLOAD_SESSION_MAX_AGE` | No | Text | Session lifetime in seconds; defaults to 7 days |
-| `UPLOAD_AUTH_KV` | Yes | KV namespace binding | Dedicated storage for failed-login throttling |
 | `img_url` | Yes | KV namespace binding | Short-code mappings, image metadata, management, and list data |
 | `BASIC_USER` | Recommended | Text | Management Basic Auth username |
 | `BASIC_PASS` | Recommended | Secret | Management Basic Auth password |
@@ -70,7 +69,45 @@ Copy variable names from [`.env.example`](.env.example), but configure real prod
 
 ### Upload access quick setup
 
-The site owner chooses the password visitors enter on `/upload-login` and stores it as the encrypted Cloudflare Secret `UPLOAD_ACCESS_PASSWORD`. Configure a different random encrypted Secret as `UPLOAD_SESSION_SECRET`, set `UPLOAD_SESSION_MAX_AGE=604800` for a seven-day session, bind the required image metadata KV as `img_url`, bind a separate throttling KV as `UPLOAD_AUTH_KV`, and set Pages Functions to fail closed before redeploying. The session secret is an internal signing key and is never entered by visitors. The [deployment guide](docs/DEPLOYMENT.md) includes the dashboard walkthrough, safe key-generation commands, and acceptance checks.
+The site owner chooses the password visitors enter on `/upload-login` and stores it as the encrypted Cloudflare Secret `UPLOAD_ACCESS_PASSWORD`. Configure a different random encrypted Secret as `UPLOAD_SESSION_SECRET`, set `UPLOAD_SESSION_MAX_AGE=604800` for a seven-day session, bind the required image metadata KV as `img_url`, and set Pages Functions to fail closed before redeploying. The session secret is an internal signing key and is never entered by visitors. No `UPLOAD_AUTH_KV` binding is needed: failed passwords are rejected with `401` without storing attempt counters.
+
+Generate the two values separately in Windows PowerShell. The first command creates a 32-character, 192-bit random upload password:
+
+```powershell
+$uploadPasswordBytes = New-Object byte[] 24
+$uploadPasswordGenerator = [Security.Cryptography.RandomNumberGenerator]::Create()
+$uploadPasswordGenerator.GetBytes($uploadPasswordBytes)
+[Convert]::ToBase64String($uploadPasswordBytes)
+$uploadPasswordGenerator.Dispose()
+```
+
+Run this separate command for a 64-character, 384-bit session secret:
+
+```powershell
+$sessionSecretBytes = New-Object byte[] 48
+$sessionSecretGenerator = [Security.Cryptography.RandomNumberGenerator]::Create()
+$sessionSecretGenerator.GetBytes($sessionSecretBytes)
+[Convert]::ToBase64String($sessionSecretBytes)
+$sessionSecretGenerator.Dispose()
+```
+
+Store both outputs as different Cloudflare Secrets and in a password manager. Never commit, publish, screenshot, or reuse them. Although the code accepts passwords from 12 characters, production deployments should use at least 24 random characters because T-IMG intentionally does not store failed-login counters. The [deployment guide](docs/DEPLOYMENT.md) includes the complete dashboard walkthrough and acceptance checks.
+
+### Custom domain and Cloudflare WAF hardening
+
+For an Internet-facing deployment, bind a hostname from a Cloudflare-managed zone, such as `img.example.com`, under `Workers & Pages > T-IMG > Custom domains`. Keep the Pages-created DNS record proxied. Zone WAF rules do not protect the original `*.pages.dev` hostname, so redirect the production `*.pages.dev` address to the custom hostname with a Cloudflare Bulk Redirect before treating WAF as an effective security layer.
+
+In the current dashboard, open the domain zone and go to `Security > Security rules > Create rule > Custom rules`. Older dashboard layouts show the same feature under `Security > WAF > Custom rules`. Replace the example hostname and select **Managed Challenge**:
+
+```text
+(http.host eq "img.example.com" and (
+  http.request.uri.path in {"/upload-login" "/upload-login/" "/upload-login.html"}
+  or (http.request.uri.path in {"/api/upload-auth/login" "/api/upload-auth/login/"}
+      and http.request.method eq "POST")
+))
+```
+
+Set **Status** to **Active** before selecting **Deploy**; **Disabled** only stores the rule and does not evaluate incoming traffic. The rule challenges the login entry and direct password submissions while leaving `/i/*` and `/file/*` publicly embeddable. The Cloudflare `cf_clearance` cookie and the T-IMG upload-session cookie are separate layers; passing the challenge never replaces the backend password. A 30-minute Challenge Passage is a practical default. Optionally add a path-scoped rate limiting rule for `/api/upload-auth/login` and enable Bot Fight Mode only after checking Security Events for false positives. Do not challenge all paths globally, because that can break public image embedding, API clients, and uploads whose clearance has expired. Full setup, bypass prevention, testing, and rollback instructions are in the [deployment guide](docs/DEPLOYMENT.md).
 
 ## Public Routes
 

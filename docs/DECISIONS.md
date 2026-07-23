@@ -86,6 +86,7 @@
 
 - 日期：2026-07-19
 - 状态：已接受
+- 修订：2026-07-23 起，登录限流部分由 ADR-014 取代；密码校验、签名 Cookie、上传接口二次校验和失败关闭继续有效。
 - 决策：上传页面由根级 Pages Functions 中间件保护；密码只在后端校验，成功后签发 HMAC-SHA256 签名的 `__Host-`、`HttpOnly`、`Secure`、`SameSite=Strict` Cookie；`POST /upload` 再次验证会话并拒绝浏览器跨站请求。登录失败使用独立 `UPLOAD_AUTH_KV` 做匿名化基础限流，缺少关键配置时失败关闭。
 - 原因：前端隐藏或 localStorage 标记可被绕过；无状态签名会话适合 Pages Functions，不需要新增运行依赖；独立限流 KV 不污染 `img_url` 图片索引。
 - 兼容：`/file/:id` 保持公开，后台管理认证不变；有效后台 Basic Auth 仍可调用 `/upload`，以保持画廊批量上传。`_routes.json` 同时包含 `.html` 与 Pages Clean URLs 等价路径，生产配额行为必须设置为 Fail closed。
@@ -113,3 +114,25 @@
 - 兼容：旧 `/file/:id` 链接继续公开；文件代理识别带 `telegramFileId` 的短码记录，使后台现有 `/file/短码` 预览仍可使用。Telegram 已成功但短码 KV 写入失败时返回旧式长链接，避免产生不可访问结果。
 - 故障语义：无短码记录返回 404；短链依赖的 `img_url` 不可用时返回 503；错误和日志不包含完整 Telegram 标识或密钥。
 - 相关需求：DEV-011
+
+## ADR-014：上传认证不保存错误次数
+
+- 日期：2026-07-23
+- 状态：已接受
+- 背景：T-IMG 面向个人部署，项目所有者决定采用最简认证模型：没有正确密码就拒绝访问和上传，不保存错误次数，也不为登录限流维护额外 KV。
+- 决策：移除 `UPLOAD_AUTH_KV` 绑定、登录失败计数和 429 分支。每次错误密码均由后端安全比较后返回统一 401，不创建会话、不记录密码，也不读写 KV；正确密码仍签发安全会话 Cookie，上传页面和 `POST /upload` 的后端校验、跨站防护及 Fail closed 保持不变。
+- 安全边界：生产访问密码应使用密码学安全随机源生成至少 24 个随机字符，会话密钥独立生成并至少 32 字符；二者都保存为 Cloudflare Secret。错误请求仍会消耗 Pages Functions 请求，不应把“无 KV 操作”理解为完全无资源消耗。
+- 取舍：减少一个 KV Namespace、运行时读写和部署配置，但不再提供应用内暴力破解限流。公开范围扩大或出现异常流量时，应优先在自定义域名的 Cloudflare 边缘叠加 WAF/Rate Limiting、Turnstile 或 Access。
+- 迁移：先部署新代码并验证登录与上传，再移除 Pages 的 `UPLOAD_AUTH_KV` 绑定；确认无其他项目使用后可删除旧 Namespace。`img_url` 是图片数据必需绑定，不能删除。
+- 相关需求：DEV-013；取代 ADR-011 中的登录限流部分
+
+## ADR-015：自定义域名的 WAF 只质询上传登录入口
+
+- 日期：2026-07-23
+- 状态：已接受
+- 背景：应用内不记录失败次数后，需要提供不消耗认证 KV 的可选边缘防护；同时公开 `/i/*`、`/file/*` 必须继续适合博客引用和匿名访问。
+- 决策：生产环境建议绑定由 Cloudflare 区域代理的自定义域名，并以 WAF Custom Rule 的 Managed Challenge 只匹配上传登录页面、Pages 尾斜杠等价路径和 `POST /api/upload-auth/login[/]`。不对全站、公开文件、静态资源、会话 API 或 `POST /upload` 做默认质询；T-IMG 后端密码、签名会话和 Fail closed 继续作为必需防护。
+- 防旁路：域名级 WAF 不覆盖 Pages 自动生成的 `*.pages.dev` 主机名；生产默认域名必须通过 Bulk Redirect 保留路径和查询参数跳往自定义域名，Preview 则使用重定向或 Access 明确收口。
+- 认证分层：Cloudflare `cf_clearance` 证明浏览器通过人机验证，T-IMG `__Host-t_img_upload_session` 证明用户输入正确访问密码。Challenge Passage 建议先保持 30 分钟，不与默认 7 天上传会话强行对齐。
+- 取舍：窄范围规则减少自动化登录流量且不修改项目代码；全站 Managed Challenge、Bot Fight Mode 和过严 Rate Limiting 可能误伤公开图片、共享出口和非浏览器客户端，启用后必须根据 Security Events 调整。
+- 相关需求：DEV-014

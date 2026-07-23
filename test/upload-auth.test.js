@@ -19,24 +19,6 @@ const baseEnv = {
   UPLOAD_SESSION_MAX_AGE: "604800",
 };
 
-function createRateLimitKv() {
-  const records = new Map();
-  return {
-    records,
-    async get(key, type) {
-      const value = records.get(key);
-      if (value === undefined) return null;
-      return type === "json" ? JSON.parse(value) : value;
-    },
-    async put(key, value) {
-      records.set(key, value);
-    },
-    async delete(key) {
-      records.delete(key);
-    },
-  };
-}
-
 function jsonRequest(password, returnTo = "/", extraHeaders = {}) {
   return new Request("https://example.com/api/upload-auth/login", {
     method: "POST",
@@ -188,7 +170,7 @@ describe("upload page middleware", function () {
 
 describe("upload authentication endpoints", function () {
   it("logs in with the correct password and recognizes the resulting session", async function () {
-    const env = { ...baseEnv, UPLOAD_AUTH_KV: createRateLimitKv() };
+    const env = { ...baseEnv };
     const loginResponse = await login({
       request: jsonRequest(baseEnv.UPLOAD_ACCESS_PASSWORD, "/markdown-upload.html"),
       env,
@@ -211,7 +193,7 @@ describe("upload authentication endpoints", function () {
   });
 
   it("supports the non-JavaScript form fallback without allowing an open redirect", async function () {
-    const env = { ...baseEnv, UPLOAD_AUTH_KV: createRateLimitKv() };
+    const env = { ...baseEnv };
     const body = new URLSearchParams({
       password: baseEnv.UPLOAD_ACCESS_PASSWORD,
       returnTo: "//evil.example/path",
@@ -229,30 +211,21 @@ describe("upload authentication endpoints", function () {
     assert.ok(response.headers.get("Set-Cookie"));
   });
 
-  it("rejects a wrong password and rate limits the fifth failure", async function () {
-    const env = { ...baseEnv, UPLOAD_AUTH_KV: createRateLimitKv() };
+  it("rejects every wrong password without storing an attempt counter", async function () {
+    const env = { ...baseEnv };
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       const response = await login({ request: jsonRequest("wrong-password"), env });
-      assert.equal(response.status, attempt < 5 ? 401 : 429);
+      assert.equal(response.status, 401);
       const result = JSON.parse(await response.text());
-      assert.equal(result.code, attempt < 5 ? "invalid_credentials" : "login_rate_limited");
+      assert.equal(result.code, "invalid_credentials");
       assert.equal(response.headers.has("Set-Cookie"), false);
     }
-  });
-
-  it("fails closed when the dedicated rate-limit KV binding is missing", async function () {
-    const response = await login({
-      request: jsonRequest(baseEnv.UPLOAD_ACCESS_PASSWORD),
-      env: baseEnv,
-    });
-    assert.equal(response.status, 503);
-    assert.equal(JSON.parse(await response.text()).code, "login_rate_limit_unavailable");
   });
 
   it("rejects cross-site login attempts", async function () {
     const response = await login({
       request: jsonRequest(baseEnv.UPLOAD_ACCESS_PASSWORD, "/", { Origin: "https://evil.example" }),
-      env: { ...baseEnv, UPLOAD_AUTH_KV: createRateLimitKv() },
+      env: baseEnv,
     });
     assert.equal(response.status, 403);
   });
