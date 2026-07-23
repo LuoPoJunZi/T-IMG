@@ -164,7 +164,7 @@ Cloudflare 官方参考：[Pages Functions 变量与 Secret](https://developers.
 2. 输入与 `UPLOAD_ACCESS_PASSWORD` 不同的密码，应拒绝进入。
 3. 输入完全相同的密码，应进入原上传界面并可正常上传。
 4. 刷新页面，在 `UPLOAD_SESSION_MAX_AGE` 有效期内应保持登录。
-5. 点击“退出上传”后，再次访问上传页面应重新要求输入密码。
+5. 上传页不显示退出按钮；如需验证退出接口，可从已登录的同源页面向 `/api/upload-auth/logout` 提交 `POST`，或清除该站点 Cookie，随后再次访问上传页应重新要求输入密码。
 6. 未登录直接请求 `POST /upload` 应返回 401；已有 `/file/:id` 仍应公开访问，后台管理不应被重定向到上传登录页。
 
 ## Telegram 必需变量

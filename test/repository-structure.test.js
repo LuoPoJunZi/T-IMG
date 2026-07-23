@@ -68,6 +68,15 @@ describe("repository naming conventions", function () {
     }
   });
 
+  it("does not show an explicit logout control on upload pages", function () {
+    for (const page of ["index.html", "markdown-upload.html"]) {
+      const html = readFileSync(page, "utf8");
+      assert.equal(html.includes("upload-session-logout"), false, `${page} must not include logout control styles`);
+      assert.equal(html.includes('action="/api/upload-auth/logout"'), false, `${page} must not include a logout form`);
+      assert.equal(html.includes("退出上传"), false, `${page} must not include the logout label`);
+    }
+  });
+
   it("keeps legacy camelCase management routes as compatible aliases", function () {
     assert.equal(legacyEditName, editName);
     assert.equal(legacyToggleLike, toggleLike);
