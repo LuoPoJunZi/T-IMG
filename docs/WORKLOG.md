@@ -292,8 +292,8 @@ DEV-014 已完成本地文档更新，尚未提交、推送或修改 Cloudflare 
 - 完整开发依赖审计：`concurrently`/`shell-quote` 告警已消失；剩余 3 个高危条目全部属于 Wrangler → Miniflare → Sharp 同一上游链路，按 ADR-016 保持可见。
 - 标准 `npm test`：60 项通过、0 失败。
 - `npm run ci-test`：Wrangler 4.112.0 编译成功，62 项 Pages HTTP 与回归测试通过、0 失败；`concurrently` 9.2.4 能在测试成功后终止本地服务。
-- `git diff --check` 和新一轮 GitHub Actions 待提交前及推送后确认。
+- `git diff --check` 通过；修复提交 `690fc7a` 推送后，GitHub Actions `CI` 第 9 次运行成功，生产审计、开发工具公告和 Pages 回归步骤均实际执行完成。
 
 ### 当前状态
 
-DEV-015 本地实现与主要验证完成，尚未提交或推送。
+DEV-015 已由提交 `690fc7a` 推送并通过 GitHub Actions，故障运行与修复运行均保留在仓库 Actions 历史中。
