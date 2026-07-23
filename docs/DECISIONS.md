@@ -136,3 +136,13 @@
 - 认证分层：Cloudflare `cf_clearance` 证明浏览器通过人机验证，T-IMG `__Host-t_img_upload_session` 证明用户输入正确访问密码。Challenge Passage 建议先保持 30 分钟，不与默认 7 天上传会话强行对齐。
 - 取舍：窄范围规则减少自动化登录流量且不修改项目代码；全站 Managed Challenge、Bot Fight Mode 和过严 Rate Limiting 可能误伤公开图片、共享出口和非浏览器客户端，启用后必须根据 Security Events 调整。
 - 相关需求：DEV-014
+
+## ADR-016：生产依赖审计阻断，开发工具公告保持可见
+
+- 日期：2026-07-23
+- 状态：已接受
+- 背景：新的 npm 高危公告同时命中 `concurrently` 的 `shell-quote` 和 Wrangler/Miniflare 固定的 Sharp。前者已有兼容安全版本；后者在当前最新版 Wrangler 中仍未由上游升级，npm 建议的 Wrangler 4.15.2 会大幅回退本地 Workers Runtime，强制覆盖 Sharp 也不属于上游支持组合。
+- 决策：将 `concurrently` 固定到使用 `shell-quote` 1.9.0 的 9.2.4。CI 对生产依赖执行 `npm audit --omit=dev --audit-level=high` 并保持阻断；完整开发依赖审计继续运行并显示公告，但使用 `continue-on-error`，不得阻止真实 Pages HTTP 和回归测试。
+- 安全边界：T-IMG 没有随生产 Pages 站点发布的 npm 运行依赖；Wrangler、Miniflare 和 Sharp 只用于本地/CI Pages 模拟。非阻断不等于忽略，需持续观察上游版本并在其提供兼容安全组合后正常升级。
+- 取舍：不为了让审计报告归零而使用失真的旧 Runtime 或未验证的传递依赖覆盖；同时避免一个无法由本项目修复的开发工具公告跳过全部功能测试。
+- 相关需求：DEV-015；修订 ADR-010 中“npm 官方安全审计为 0 漏洞”的时点描述

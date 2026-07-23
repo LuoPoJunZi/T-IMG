@@ -34,6 +34,7 @@
 - `img_url` 明确为生产上传和后台管理必需的 KV Namespace 绑定；已有 `/file/:id` 在绑定异常时仍保持公开访问。
 - 新上传在短码记录写入成功后返回 `/i/` 地址；旧 `/file/:id` 和后台 `/file/短码` 访问保持兼容。公开文件元数据没有变化时不再重复写入 KV。
 - 上传认证取消错误次数记录、429 登录限流和 `UPLOAD_AUTH_KV` 依赖；错误密码统一由后端返回 401，安全会话、接口二次校验和退出行为保持不变。
+- CI 将生产依赖高危审计保持为阻断项；开发工具链审计继续显示上游告警但不再跳过 Pages 和回归测试。
 
 ### Fixed
 
@@ -47,12 +48,13 @@
 - 修复缺少 `img_url`、把它误设为文本或不完整对象时仍联系 Telegram 并返回上传成功的问题。
 - 修复 CI 仅等待 Wrangler 启动但不通过 HTTP 验证 Pages 上传路由的问题。
 - 修复上传页吞掉 401、413、502、503 分类信息并统一显示不可操作错误的问题。
+- 修复新发布的开发依赖公告导致 GitHub Actions 在测试前退出的问题；`concurrently` 固定到使用安全 `shell-quote` 的 9.2.4。
 
 ### Security
 
 - 环境变量示例仅使用占位值，并默认忽略本地 `.env*` 文件（保留 `.env.example`）。
 - 移除指向第三方固定 Sentry 项目的前端脚本、Functions 遥测代码、相关依赖及生成包中的百度页面追踪钩子。
-- 升级到 Node.js 22、Wrangler 4 和当前测试工具，改用 Node 内置测试运行器并将 npm 安全审计降为 0 漏洞。
+- 升级到 Node.js 22、Wrangler 4 和当前测试工具，改用 Node 内置测试运行器；生产依赖继续执行阻断式高危审计，Wrangler 上游开发工具公告在 CI 中保持可见。
 - GitHub Actions 在 `main` 推送、Pull Request 和手动触发时运行，官方 Action 固定到完整提交 SHA。
 - 增加 `.gitattributes`、`.editorconfig`、贡献指南、安全策略和 Pull Request 模板。
 - Telegram 文件不会把包含 Bot Token 的下载地址发送给第三方内容审核服务。

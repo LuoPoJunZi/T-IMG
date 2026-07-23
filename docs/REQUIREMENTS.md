@@ -185,6 +185,18 @@
 - 优先级：高
 - 状态：已完成
 
+### DEV-015
+
+- 需求名称：修复 GitHub Actions 开发依赖审计阻断
+- 需求描述：解决新 npm 安全公告导致 CI 在测试前退出的问题；修复已有兼容安全版本的直接开发工具链，同时让暂时只能等待上游的 Wrangler/Miniflare 公告保持可见但不跳过功能测试。
+- 用户价值：GitHub Actions 能继续验证真实 Pages 路由和回归测试，不会因无法由 T-IMG 自身修复的纯开发工具公告持续报红，也不会把公告完全隐藏。
+- 涉及运行代码与接口：不修改 Pages Functions、页面、公开路由、响应或 Cloudflare 生产配置。
+- 依赖要求：`concurrently` 使用包含安全 `shell-quote` 的 9.2.4；不得为清零审计报告强制降级 Wrangler Runtime 或覆盖 Cloudflare 未验证的 Miniflare/Sharp 组合。
+- CI 要求：生产依赖高危审计继续阻断；完整开发依赖审计必须运行并显示上游公告，但不阻止 `npm run ci-test`；安装继续使用锁文件和 `npm ci`。
+- 验收标准：生产依赖审计返回 0；`shell-quote` 漏洞不再出现；剩余公告仅来自 Wrangler 开发工具链；单元测试和 Pages HTTP 回归通过；新一轮 GitHub Actions 总体成功且仍显示开发审计告警。
+- 优先级：高
+- 状态：已完成
+
 ## 非功能需求
 
 - 安全优先于兼容、功能、维护性和界面美观。

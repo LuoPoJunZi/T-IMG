@@ -269,3 +269,31 @@ DEV-013 已完成本地实现与文档同步，尚未提交、推送或部署。
 ### 当前状态
 
 DEV-014 已完成本地文档更新，尚未提交、推送或修改 Cloudflare 生产环境。
+
+## 2026-07-23：修复 GitHub Actions 依赖审计阻断
+
+### 问题与原因
+
+- GitHub Actions `CI` 第 8 次运行在 `Audit dependencies` 步骤退出 1，后续 Pages 和回归测试被跳过；前一提交的同一工作流成功，说明失败来自新发布的 npm 安全公告而非测试回归。
+- 官方 npm Registry 审计发现 `concurrently` 10.0.3 间接使用存在高危复杂度拒绝服务问题的 `shell-quote` 1.8.4；Wrangler 4.112.0 的 Miniflare 还固定 Sharp 0.34.5，命中新发布的 libvips 继承漏洞公告。
+- `concurrently` 已有兼容修复版本 9.2.4。当前最新版 Wrangler 仍使用 Sharp 0.34.5；npm 建议降到 Wrangler 4.15.2 会回退当前 Runtime，强制覆盖 Sharp 0.35 也不是 Cloudflare 上游验证组合。
+
+### 已完成
+
+- 将 `concurrently` 精确固定到 9.2.4，锁文件同步使用已修复的 `shell-quote` 1.9.0。
+- CI 将 `npm audit --omit=dev --audit-level=high` 作为阻断式生产依赖审计。
+- 完整开发依赖审计继续运行并展示上游 Wrangler/Sharp 公告，但使用 `continue-on-error`，保证 Pages HTTP 和回归测试仍然执行。
+- 记录 ADR-016，并同步开发计划和变更记录；未修改 T-IMG 运行代码、Cloudflare 绑定或生产环境。
+
+### 验证
+
+- 按锁文件重新安装成功；本地工作区仅提供 Node.js `v24.14.0`，因此出现项目要求 Node 22 的预期引擎警告，GitHub Actions 仍使用正式 Node.js 22 基线。
+- 阻断式 `npm audit --omit=dev --audit-level=high`：0 项漏洞、退出 0。
+- 完整开发依赖审计：`concurrently`/`shell-quote` 告警已消失；剩余 3 个高危条目全部属于 Wrangler → Miniflare → Sharp 同一上游链路，按 ADR-016 保持可见。
+- 标准 `npm test`：60 项通过、0 失败。
+- `npm run ci-test`：Wrangler 4.112.0 编译成功，62 项 Pages HTTP 与回归测试通过、0 失败；`concurrently` 9.2.4 能在测试成功后终止本地服务。
+- `git diff --check` 和新一轮 GitHub Actions 待提交前及推送后确认。
+
+### 当前状态
+
+DEV-015 本地实现与主要验证完成，尚未提交或推送。
